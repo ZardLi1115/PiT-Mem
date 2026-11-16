@@ -1,0 +1,18 @@
+{
+  "total_bitemporal_records": 2000000,
+  "alfred_pit_vintages": 3464,
+  "sec_edgar_xbrl_facts": 33224,
+  "hf_unique_financial_passages": 394529,
+  "total_unique_authentic_seed_passages": 431217,
+  "expansion_factor_over_unique_seeds": 4.64,
+  "sample_1nn_cosine_mean": 0.7383,
+  "sample_1nn_cosine_p50": 0.7272,
+  "sample_1nn_cosine_p95": 0.8799,
+  "near_duplicate_clone_rate_gt_0995": 0.00175,
+  "intra_lineage_sec_cos_mean": 0.9449,
+  "intra_lineage_sec_cos_p50": 0.947,
+  "intra_lineage_sec_cos_p90": 0.9655,
+  "intra_lineage_evolve_cos_mean": 0.9966,
+  "intra_lineage_evolve_cos_p50": 0.9969,
+  "intra_lineage_combined_cos_p50": 0.9932
+}

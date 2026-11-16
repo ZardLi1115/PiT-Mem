@@ -1,0 +1,173 @@
+% Auto-generated LaTeX tables from experimental CSVs
+\newcommand{\TableExpOne}{%
+\begin{table*}[t]
+\centering
+\caption{Exp 1: Single-thread wall-clock QPS ($\text{QPS} = N_q / T_{\text{wall}}$), Mean/P50/P99 latency, Recall@10, causal-graph trigger share, build time, and memory footprint up to $N = \MaxCorpusScale$ under Workload 1A ($\sigma \approx 12\%$) and Workload 1B ($\sigma \approx 1.0\%$). For PiT-Mem, we report All-RAM total alongside the \CoreIndexBytesPerRec~B/rec core index array footprint (at 2M: $ef=192$ on W1A, $ef=96$ on W1B; matched POSIX \texttt{mmap} cold-FP32 NVMe offload at $\CoreIndexRAMGiB$~GiB resident RAM is evaluated in Table~\ref{tab:exp6_sys}).}
+\label{tab:exp1_detail}
+\scriptsize
+{\renewcommand{\arraystretch}{0.86}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrrrr}
+\toprule
+\textbf{Scale} & \textbf{System} & \textbf{1T QPS} & \textbf{Mean (ms)} & \textbf{P50 (ms)} & \textbf{P99 (ms)} & \textbf{Recall@10} & \textbf{Graph \%} & \textbf{Build / Index Footprint} \\
+\midrule
+\multicolumn{9}{l}{\textbf{Workload 1A: Moderate Snapshot ($\sigma \approx 12\%$, Causal Graph Regime)}} \\
+\midrule
+100K & \textbf{PiT-Mem (Ours)} & \textbf{2,195} & 0.46 & 0.43 & \textbf{0.76} & \textbf{92.6\%} & 100\% & 9.3~s / 391~MiB (98~MiB core) \\
+100K & Grid-SQ8-Scan (No Graph) & 1,375 & 0.73 & 0.72 & 0.79 & 100.0\% & 0\% & 0.5~s / 370~MiB \\
+100K & ACORN-BiTemp (2-Hop) & 1,084 & 0.92 & 0.91 & 1.51 & 93.9\% & 100\% & 18.0~s / 320~MiB \\
+100K & HNSW-Post (RNG) & 1,188 & 0.84 & 0.86 & 1.21 & 93.9\% & 100\% & 14.8~s / 307~MiB \\
+100K & SeRF-Adapt ($t_v^s$) & 498 & 2.01 & 2.06 & 2.61 & 93.5\% & 100\% & 9.3~s / 308~MiB \\
+100K & DSG-1D ($t_k^s$) & 526 & 1.90 & 1.96 & 2.50 & 93.9\% & 100\% & 9.2~s / 308~MiB \\
+100K & Zep/Graphiti & 937 & 1.07 & 1.11 & 1.42 & 95.1\% & 100\% & 15.2~s / 314~MiB \\
+100K & PG-BiTemp (\texttt{pgvector}) & 306 & 3.27 & 2.22 & 3.79 & 96.6\% & 0\% & 51.7~s / 359~MiB \\
+\midrule
+500K & \textbf{PiT-Mem (Ours)} & \textbf{1,059} & 0.94 & 0.93 & \textbf{1.22} & \textbf{93.1\%} & 100\% & 51.3~s / 1.91~GiB (0.48~GiB core) \\
+500K & Grid-SQ8-Scan (No Graph) & 129 & 7.77 & 7.77 & 8.26 & 100.0\% & 0\% & 2.7~s / 1.81~GiB \\
+500K & ACORN-BiTemp (2-Hop) & 222 & 4.51 & 4.43 & 5.95 & 94.6\% & 100\% & 115.1~s / 1.56~GiB \\
+500K & HNSW-Post (RNG) & 1,041 & 0.96 & 0.95 & 1.53 & 93.0\% & 100\% & 88.6~s / 1.50~GiB \\
+500K & SeRF-Adapt ($t_v^s$) & 226 & 4.43 & 4.58 & 5.90 & 93.7\% & 100\% & 58.6~s / 1.50~GiB \\
+500K & DSG-1D ($t_k^s$) & 227 & 4.41 & 4.60 & 5.88 & 93.7\% & 100\% & 58.1~s / 1.50~GiB \\
+500K & Zep/Graphiti & 788 & 1.27 & 1.25 & 1.93 & 94.6\% & 100\% & 90.6~s / 1.53~GiB \\
+500K & PG-BiTemp (\texttt{pgvector}) & 326 & 3.07 & 2.38 & 3.73 & 93.6\% & 0\% & 256.6~s / 1.62~GiB \\
+\midrule
+2M & \textbf{PiT-Mem (Ours)} & \textbf{283} & 3.53 & 3.49 & \textbf{4.92} & \textbf{93.1\%} & 100\% & 183.9~s / 7.64~GiB (1.92~GiB core) \\
+2M & Grid-SQ8-Scan (No Graph) & 31.4 & 31.86 & 31.79 & 32.66 & 98.4\% & 0\% & 10.7~s / 7.23~GiB \\
+2M & ACORN-BiTemp (2-Hop) & 46.1 & 21.71 & 22.14 & 29.35 & 93.1\% & 100\% & 367.4~s / 6.24~GiB \\
+2M & HNSW-Post (RNG) & 121 & 8.28 & 7.86 & 16.06 & 94.1\% & 100\% & 269.2~s / 6.01~GiB \\
+2M & SeRF-Adapt ($t_v^s$) & 254 & 3.93 & 3.81 & 6.36 & 87.0\% & 100\% & 193.9~s / 6.01~GiB \\
+2M & DSG-1D ($t_k^s$) & 259 & 3.86 & 3.75 & 6.61 & 87.0\% & 100\% & 191.3~s / 6.01~GiB \\
+2M & PG-BiTemp (\texttt{pgvector}) & 133 & 7.53 & 6.41 & 10.96 & 94.4\% & 0\% & 921.5~s / 4.87~GiB \\
+\midrule
+\multicolumn{9}{l}{\textbf{Workload 1B: Sparse Historical Audit ($\sigma \approx 1.0\%$, Analytical Router Regime)}} \\
+\midrule
+100K & \textbf{PiT-Mem (Ours)} & \textbf{10,135} & 0.10 & 0.09 & \textbf{0.12} & \textbf{100.0\%} & 0\% & 9.3~s / 391~MiB (98~MiB core) \\
+100K & Grid-SQ8-Scan (No Graph) & 11,260 & 0.09 & 0.08 & 0.10 & 100.0\% & 0\% & 0.5~s / 370~MiB \\
+100K & ACORN-BiTemp (2-Hop) & 135 & 7.40 & 7.45 & 8.46 & 99.9\% & 100\% & 18.0~s / 320~MiB \\
+100K & HNSW-Post (RNG) & 123 & 8.13 & 8.04 & 10.65 & 98.3\% & 100\% & 14.8~s / 307~MiB \\
+100K & SeRF-Adapt ($t_v^s$) & 338 & 2.96 & 2.99 & 3.76 & 93.1\% & 100\% & 9.3~s / 308~MiB \\
+100K & DSG-1D ($t_k^s$) & 345 & 2.90 & 2.92 & 3.76 & 91.7\% & 100\% & 9.2~s / 308~MiB \\
+100K & Zep/Graphiti & 171 & 5.86 & 5.76 & 7.80 & 97.2\% & 100\% & 15.2~s / 314~MiB \\
+100K & PG-BiTemp (\texttt{pgvector}) & 54.5 & 18.35 & 14.46 & 32.54 & 97.0\% & 0\% & 51.7~s / 359~MiB \\
+\midrule
+500K & \textbf{PiT-Mem (Ours)} & \textbf{2,308} & 0.43 & 0.43 & \textbf{0.45} & \textbf{99.9\%} & 0\% & 51.3~s / 1.91~GiB (0.48~GiB core) \\
+500K & Grid-SQ8-Scan (No Graph) & 2,421 & 0.41 & 0.41 & 0.44 & 99.9\% & 0\% & 2.7~s / 1.81~GiB \\
+500K & ACORN-BiTemp (2-Hop) & 24.7 & 40.53 & 40.69 & 44.91 & 99.1\% & 100\% & 115.1~s / 1.56~GiB \\
+500K & HNSW-Post (RNG) & 98.0 & 10.20 & 10.45 & 14.78 & 96.7\% & 100\% & 88.6~s / 1.50~GiB \\
+500K & SeRF-Adapt ($t_v^s$) & 247 & 4.06 & 4.20 & 5.49 & 86.5\% & 100\% & 58.6~s / 1.50~GiB \\
+500K & DSG-1D ($t_k^s$) & 246 & 4.07 & 4.35 & 5.39 & 82.6\% & 100\% & 58.1~s / 1.50~GiB \\
+500K & Zep/Graphiti & 140 & 7.16 & 7.44 & 11.11 & 94.3\% & 100\% & 90.6~s / 1.53~GiB \\
+500K & PG-BiTemp (\texttt{pgvector}) & 45.8 & 21.83 & 18.56 & 33.94 & 96.8\% & 0\% & 256.6~s / 1.62~GiB \\
+\midrule
+2M & \textbf{PiT-Mem (Ours)} & \textbf{565} & 1.77 & 1.75 & \textbf{2.15} & \textbf{100.0\%} & 0\% & 183.9~s / 7.64~GiB (1.92~GiB core) \\
+2M & Grid-SQ8-Scan (No Graph) & 536 & 1.87 & 1.83 & 2.28 & 100.0\% & 0\% & 10.7~s / 7.23~GiB \\
+2M & ACORN-BiTemp (2-Hop) & 15.3 & 65.42 & 65.47 & 76.64 & 88.0\% & 100\% & 367.4~s / 6.24~GiB \\
+2M & HNSW-Post (RNG) & 117 & 8.54 & 8.13 & 14.95 & 94.9\% & 100\% & 269.2~s / 6.01~GiB \\
+2M & SeRF-Adapt ($t_v^s$) & 237 & 4.21 & 4.22 & 6.00 & 80.1\% & 100\% & 193.9~s / 6.01~GiB \\
+2M & DSG-1D ($t_k^s$) & 241 & 4.15 & 4.15 & 6.07 & 78.5\% & 100\% & 191.3~s / 6.01~GiB \\
+2M & PG-BiTemp (\texttt{pgvector}) & 72.5 & 13.80 & 9.75 & 31.76 & 94.0\% & 0\% & 921.5~s / 4.87~GiB \\
+\bottomrule
+\end{tabular}}}
+\end{table*}}
+
+\newcommand{\TableExpFour}{%
+\begin{table}[t]
+\centering
+\caption{Exp 4: Look-Ahead Contamination Rate (LCR), Stale Taint, Grounded Audit F1, and Simulated Backtest Sharpe (Proto A: post-2025 SEC; Proto B: counterfactual covenants).}
+\label{tab:exp4}
+\small
+{\renewcommand{\arraystretch}{0.88}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{llrrrr}
+\toprule
+\textbf{Proto.} & \textbf{Memory System} & \textbf{LCR ($\downarrow$)} & \textbf{Stale ($\downarrow$)} & \textbf{F1 ($\uparrow$)} & \textbf{Sharpe ($\Delta$)} \\
+\midrule
+Proto A (SEC) & \textbf{PiT-Mem (Full)} & 0.0\% & 0.0\% & 71.2\% & 0.39 (+0.00) \\
+Proto A (SEC) & PiT-Mem (w/o Lazy-Branch) & 0.0\% & 80.0\% & 11.9\% & 0.39 (+0.00) \\
+Proto A (SEC) & Zep/Graphiti & 72.5\% & 20.0\% & 52.8\% & 0.64 (+0.25) \\
+Proto A (SEC) & Mem0-Overwrite & 99.2\% & 0.0\% & 62.9\% & 4.74 (+4.35) \\
+Proto A (SEC) & Naive-GraphRAG & 68.3\% & 100.0\% & 0.0\% & 1.77 (+1.38) \\
+Proto B (Cov.) & \textbf{PiT-Mem (Full)} & 0.0\% & 0.0\% & 66.7\% & 0.72 (+0.00) \\
+Proto B (Cov.) & PiT-Mem (w/o Lazy-Branch) & 0.0\% & 100.0\% & 0.0\% & 0.72 (+0.00) \\
+Proto B (Cov.) & Zep/Graphiti & 50.0\% & 50.0\% & 36.3\% & 2.25 (+1.53) \\
+Proto B (Cov.) & Mem0-Overwrite & 96.7\% & 0.0\% & 34.1\% & 2.28 (+1.56) \\
+Proto B (Cov.) & Naive-GraphRAG & 71.7\% & 93.3\% & 0.0\% & 0.88 (+0.16) \\
+\bottomrule
+\end{tabular}}}
+\end{table}}
+
+\newcommand{\TableExpFive}{%
+\begin{table}[t]
+\centering
+\caption{Exp 5: Compaction footprint, hybrid Point-in-Time anchor-join query latency ($\mu$s; \texttt{---} denotes lossy text/centroid baselines without typed-anchor joins), and covenant/XBRL accuracy ($\beta = 25\%$) across Protocol B and post-2025 SEC EDGAR XBRL restatements.}
+\label{tab:exp5}
+\small
+{\renewcommand{\arraystretch}{0.90}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Compaction Method} & \textbf{Bytes (Ratio)} & \textbf{Lat ($\mu$s)} & \textbf{Num.\ Exact} & \textbf{Clause Pol.} & \textbf{Exact QA} \\
+\midrule
+\textbf{RAP-Compact (Ours, Proto B)} & 7.6\% (\textbf{13.2$\times$}) & \textbf{8.4} & 100.0\% & 100.0\% & \textbf{100.0\%} \\
+Parquet-Zstd + Medoid & 11.7\% (8.6$\times$) & 1{,}929.5 & 100.0\% & 100.0\% & 100.0\% \\
+SQLite-BTree + Medoid & 23.5\% (4.3$\times$) & 43.4 & 100.0\% & 100.0\% & 100.0\% \\
+LLM-Abstractive-Summary & 11.4\% (8.7$\times$) & --- & 8.5\% & 20.5\% & 1.5\% \\
+Centroid-MeanPool & 25.1\% (4.0$\times$) & --- & 18.0\% & 18.0\% & 18.0\% \\
+Narrative-Truncation & 25.2\% (4.0$\times$) & --- & 0.0\% & 0.0\% & 0.0\% \\
+\midrule
+\textbf{RAP-Compact (SEC EDGAR XBRL)} & 5.4\% (\textbf{18.5$\times$}) & \textbf{9.0} & 100.0\% & 100.0\% & \textbf{100.0\%} \\
+\bottomrule
+\end{tabular}}}
+\end{table}}
+
+\newcommand{\TableExpSix}{%
+\begin{table}[t]
+\centering
+\caption{Exp 6A: Chronological streaming arrival ($N = \StreamScale$, $\sigma \approx 0.2\%$) comparing frozen boot-grid calibration against online causal macro-segment rollover (Vitter lag reservoir + $>\!20\%$ skew guard; Sealed / Tail Max report max cell share in aggregated sealed grid and active tail) and offline oracle bounds.}
+\label{tab:exp6}
+\small
+{\renewcommand{\arraystretch}{0.88}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Grid Policy} & \textbf{Segs} & \textbf{Tail $(15,15)$} & \textbf{Sealed / Tail Max} & \textbf{1T QPS} & \textbf{P99 (ms)} & \textbf{R@10} \\
+\midrule
+Static-Frozen-BootGrid & 1 & 95.1\% & 95.1\% / 95.1\% & 851 & 1.23 & 100.0\% \\
+\textbf{PiT-Mem (Streaming Segs)} & 4 & 0.0\% & 6.7\% / 7.8\% & \textbf{3,153} & \textbf{0.36} & 100.0\% \\
+Offline-Oracle-Grid & 1 & 5.1\% & 6.1\% / 6.1\% & 2,957 & 0.39 & 100.0\% \\
+\bottomrule
+\end{tabular}}}
+\end{table}}
+
+\newcommand{\TableExpSixSys}{%
+\begin{table}[t]
+\centering
+\caption{Top (Exp 6C, $N = \MaxCorpusScale$): POSIX \texttt{mmap} cold-FP32 NVMe offload (\CoreIndexBytesPerRec~B/rec RAM). Bottom (Exp 6D, $N = \ConcScale$): \texttt{PhaseFairSharedMutex} concurrent readers ($1$--$12$T) + streaming \texttt{INSERT}/\texttt{EVOLVE}/\texttt{RESTATE}/rollover.}
+\label{tab:exp6_sys}
+\scriptsize
+{\renewcommand{\arraystretch}{0.85}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{llrrrr}
+\toprule
+\textbf{Regime} & \textbf{FP32 Tier Mode} & \textbf{Res.\ RAM} & \textbf{1T / 12T QPS} & \textbf{P99 (ms)} & \textbf{R@10} \\
+\midrule
+W1A ($12\%$, $ef\!=\!192$) & All-RAM & 7.64~GiB & 277 / 1,839 & 5.16 & 93.3\% \\
+W1B ($1\%$, $ef\!=\!96$) & All-RAM & 7.64~GiB & 599 / 3,184 & 1.93 & 100.0\% \\
+W1A ($12\%$, $ef\!=\!192$) & \textbf{NVMe-mmap (Warm Cache)} & 1.92~GiB & \textbf{281} / 1,882 & 5.01 & 93.3\% \\
+W1B ($1\%$, $ef\!=\!96$) & \textbf{NVMe-mmap (Warm Cache)} & 1.92~GiB & \textbf{628} / 3,339 & 1.88 & 100.0\% \\
+W1A ($12\%$, $ef\!=\!192$) & NVMe-mmap (Cold Faults) & 1.92~GiB & 86 / 250 & 14.38 & 93.3\% \\
+W1B ($1\%$, $ef\!=\!96$) & NVMe-mmap (Cold Faults) & 1.92~GiB & 281 / 944 & 4.94 & 100.0\% \\
+\bottomrule
+\end{tabular}}\\[1pt]
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Readers} & \textbf{RO QPS (P99 ms)} & \textbf{Mixed QPS (P99 ms)} & \textbf{Writer (ops/s)} & \textbf{Rollover / Viol.} \\
+\midrule
+1T & 323 (5.01) & \textbf{283} (\textbf{5.61}) & 283 & 1 / 0 \\
+4T & 1,269 (5.12) & \textbf{924} (\textbf{7.84}) & 231 & 1 / 0 \\
+8T & 2,168 (7.08) & \textbf{1,364} (\textbf{10.00}) & 170 & 1 / 0 \\
+12T & 2,547 (7.67) & \textbf{1,613} (\textbf{13.04}) & 134 & 1 / 0 \\
+\bottomrule
+\end{tabular}}}
+\end{table}}

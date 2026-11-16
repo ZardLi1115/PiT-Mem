@@ -1,0 +1,17 @@
+{
+  "stop_loss_triggered": false,
+  "verdict": "PASS_PROCEED_TO_PAPER",
+  "exp1_moderate_graph_trigger_pct": 100.0,
+  "exp1_w1a_max_recall_at_10": 0.9967,
+  "exp1_moderate_graph_speedup_over_grid_scan": 0.54,
+  "exp1_w1b_pit_recall_at_10": 1.0,
+  "exp1_w1b_qps_ratio_vs_grid_scan": 1.036,
+  "min_sparse_scan_recall_at_10": 1.0,
+  "min_all_selectivity_recall_at_10": 0.985,
+  "mean_low_selectivity_p99_speedup_vs_hnsw": 867.63,
+  "max_pit_mem_lcr_pct": 0.0,
+  "mean_end_to_end_token_savings_pct": 76.69,
+  "min_rap_compact_covenant_qa_pct": 100.0,
+  "exp6_streaming_tail_max_cell_pct": 4.3,
+  "exp6_rows": 5
+}

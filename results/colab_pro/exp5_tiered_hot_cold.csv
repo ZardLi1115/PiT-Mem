@@ -1,0 +1,4 @@
+mode,num_queries,target_hit_rate_pct,covenant_qa_acc_pct,str_pct,hot_share_pct,cold_share_pct,hot_lat_us,cold_lat_us,mean_total_lat_us,p99_total_lat_us
+Hot-Only (BiT-HNSW + MVCC),200,42.0,42.0,0.0,100.0,0.0,12.897395013169444,0.0,12.897395013169444,24.563840356677247
+Cold-Only (RAP-Compact),200,50.0,50.0,0.0,0.0,100.0,0.0,5.7437600116827525,5.7437600116827525,16.940500231612514
+Unified Hot+Cold (query_tiered_pit),200,90.0,90.0,0.0,66.07777777777777,33.922222222222224,10.289655,3.0154949999999996,16.986890000000002,29.863719999999955

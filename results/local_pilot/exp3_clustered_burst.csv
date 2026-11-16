@@ -1,0 +1,9 @@
+dag_hops,burst_size,strategy,clean_recall_at_10,mean_refill_rounds,mean_lat_us,p99_lat_us,str_pct,max_returned_k
+3,8,Static k_fetch (2k / k+12),1.0,0.0,494.568175,755.9526999999999,0.0,10
+3,8,Adaptive k_fetch Doubling (Ours),1.0,0.0,603.666175,915.40257,0.0,10
+3,16,Static k_fetch (2k / k+12),0.6,0.0,3599.0534999999995,76798.67914999992,0.0,10
+3,16,Adaptive k_fetch Doubling (Ours),1.0,1.0,801.467525,1224.7319,0.0,10
+3,24,Static k_fetch (2k / k+12),0.1,0.0,486.94927500000006,710.50401,0.0,10
+3,24,Adaptive k_fetch Doubling (Ours),1.0,1.0,4010.8414,78913.23152999993,0.0,10
+3,32,Static k_fetch (2k / k+12),0.1,0.0,593.326875,1002.0704799999999,0.0,10
+3,32,Adaptive k_fetch Doubling (Ours),0.9949999999999999,1.05,4222.5222,76707.80136999991,0.0,10

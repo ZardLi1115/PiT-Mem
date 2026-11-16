@@ -1,0 +1,23 @@
+# Compiled binaries & Python caches
+__pycache__/
+*.py[cod]
+*.so
+*.o
+*.egg-info/
+.pytest_cache/
+.venv/
+cpp/build/
+work_*/
+
+# Large binary dataset archives (mounted via Google Drive in README.md)
+data/*.tar.zst
+data/raw_seed/*.parquet
+
+# LaTeX build intermediates
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.synctex.gz
+paper/main.pdf

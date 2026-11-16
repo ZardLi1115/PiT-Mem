@@ -1,0 +1,151 @@
+=== [Stage 0] Unpacking PiT-Mem Revision Bundle & Auditing Hardware ===
+[Hardware Env]: {
+  "timestamp_utc": "2026-11-14T00:14:45Z",
+  "gpu": "NVIDIA A100-SXM4-80GB, 81920 MiB, 580.82.07",
+  "cpu": "CPU(s):                                  12\nModel name:                              Intel(R) Xeon(R) CPU @ 2.20GHz\nThread(s) per core:                      2\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ss ht syscall nx pdpe1gb rdtscp lm constant_tsc rep_good nopl xtopology nonstop_tsc cpuid tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch ssbd ibrs ibpb stibp ibrs_enhanced fsgsbase tsc_adjust bmi1 hle avx2 smep bmi2 erms invpcid rtm mpx avx512f avx512dq rdseed adx smap clflushopt clwb avx512cd avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves arat avx512_vnni md_clear arch_capabilities\nNUMA node0 CPU(s):                       0-11",
+  "memory": "total        used        free      shared  buff/cache   available\nMem:           167Gi       2.7Gi       162Gi       2.3Mi       3.4Gi       164Gi\nSwap:             0B          0B          0B",
+  "nvme_disk": "Filesystem      Size  Used Avail Use% Mounted on\noverlay         236G  208M  236G   1% /"
+}
+=== [Stage 1] Installing Python Dependencies & Compiling C++17 Engine (-O3 -mavx2 -mfma -fopenmp) ===
+running build_ext
+building 'pit_mem_core' extension
+creating build/temp.linux-x86_64-cpython-313/src
+x86_64-linux-gnu-g++ -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -g -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection -g -fwrapv -O2 -fPIC -Iinclude -I/usr/local/lib/python3.13/dist-packages/pybind11/include -I/usr/include/python3.13 -c src/bindings.cpp -o build/temp.linux-x86_64-cpython-313/src/bindings.o -fvisibility=hidden -g0 -std=c++17 -O3 -std=c++17 -fopenmp -fno-math-errno -mavx2 -mfma
+creating build/lib.linux-x86_64-cpython-313
+x86_64-linux-gnu-g++ -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -g -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security -fcf-protection -g -fwrapv -O2 -shared -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-Bsymbolic-functions -g -fwrapv -O2 build/temp.linux-x86_64-cpython-313/src/bindings.o -L/usr/lib/x86_64-linux-gnu -o build/lib.linux-x86_64-cpython-313/pit_mem_core.cpython-313-x86_64-linux-gnu.so -fopenmp
+copying build/lib.linux-x86_64-cpython-313/pit_mem_core.cpython-313-x86_64-linux-gnu.so -> 
+=== [Stage 2] Running MW1-MW4 Unit & Multi-Threaded Concurrency Gate Check ===
+[MW1 Multi-Seg Graph] segs=4, graph_pct(ef=96)=100.0%, R@10(ef=96)=0.993, R@10(ef=384,graph)=1.000
+[MW1 Sparse Router] R@10=1.0000
+[MW2 NVMe Offload] RAM before=4104.9 B/rec -> after=1032.9 B/rec, mmap=3072.0 B/rec, offload_bw=408 MB/s
+[MW2 Concurrent Mixed] reads=14424 (11091 QPS, P99=767 us), writes=2404 (1848 ops/s), rollovers=1, tainted=604, violations=0
+[MW3 3-Hop Burst] static_recall=0.00 (rounds=0), adaptive_recall=1.00 (rounds=1)
+[MW3 Tiered PiT] hot=9, cold=1, anchors=1, top_id=77001 (dist=0.0018)
+[MW4 Streaming Skew] segs=4, corp_max=6.11%, sealed_max=5.96%, tail_max=6.83%, tail_(15,15)=0.00%
+
+ALL MW1--MW4 UNIT & CONCURRENCY STRESS TESTS PASSED 100%!
+=== [Stage 3] Running Fast Million-Scale Exp 1 Router Verification (--mode colab_pro --only-exps 1) ===
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 6827.87it/s]
+[Embed] Loaded BAAI/bge-base-en-v1.5 on cuda (batch_size=512).
+[Embed] Saved shard 1/10 (200,000 vectors) -> vecs_shard_0000.npy
+[Embed] Saved shard 2/10 (200,000 vectors) -> vecs_shard_0001.npy
+[Embed] Saved shard 3/10 (200,000 vectors) -> vecs_shard_0002.npy
+[Embed] Saved shard 4/10 (200,000 vectors) -> vecs_shard_0003.npy
+[Embed] Saved shard 5/10 (200,000 vectors) -> vecs_shard_0004.npy
+[Embed] Saved shard 6/10 (200,000 vectors) -> vecs_shard_0005.npy
+[Embed] Saved shard 7/10 (200,000 vectors) -> vecs_shard_0006.npy
+[Embed] Saved shard 8/10 (200,000 vectors) -> vecs_shard_0007.npy
+[Embed] Saved shard 9/10 (200,000 vectors) -> vecs_shard_0008.npy
+[Embed] Saved shard 10/10 (200,000 vectors) -> vecs_shard_0009.npy
+[Corpus Manifold Audit (cached)]: {
+  "total_bitemporal_records": 2000000,
+  "alfred_pit_vintages": 3464,
+  "sec_edgar_xbrl_facts": 33224,
+  "hf_unique_financial_passages": 394529,
+  "total_unique_authentic_seed_passages": 431217,
+  "expansion_factor_over_unique_seeds": 4.64,
+  "sample_1nn_cosine_mean": 0.7383,
+  "sample_1nn_cosine_p50": 0.7272,
+  "sample_1nn_cosine_p95": 0.8799,
+  "near_duplicate_clone_rate_gt_0995": 0.00175,
+  "intra_lineage_sec_cos_mean": 0.9449,
+  "intra_lineage_sec_cos_p50": 0.947,
+  "intra_lineage_sec_cos_p90": 0.9655,
+  "intra_lineage_evolve_cos_mean": 0.9966,
+  "intra_lineage_evolve_cos_p50": 0.9969,
+  "intra_lineage_combined_cos_p50": 0.9932
+}
+
+=== [Exp 1] Benchmarking Scale N = 100,000 (d=768) ===
+  [Exp 1 N=100,000 moderate_12pct] actual selectivity = 12.00% (~12,000 live)
+  [Exp 1 N=100,000 sparse_1pct] actual selectivity = 1.00% (~996 live)
+    [PiT-Mem N=100,000 moderate_12pct ef=24] R@10=0.9260, QPS=2195.4, P99=0.76ms, graph=100%
+    [PiT-Mem N=100,000 moderate_12pct ef=48] R@10=0.9610, QPS=1131.2, P99=1.44ms, graph=100%
+    [PiT-Mem N=100,000 moderate_12pct ef=96] R@10=0.9780, QPS=671.3, P99=2.04ms, graph=100%
+    [PiT-Mem N=100,000 moderate_12pct ef=192] R@10=0.9950, QPS=387.4, P99=3.44ms, graph=100%
+    [PiT-Mem N=100,000 moderate_12pct ef=384] R@10=1.0000, QPS=223.4, P99=5.86ms, graph=100%
+    [PiT-Mem N=100,000 sparse_1pct ef=24] R@10=1.0000, QPS=9698.1, P99=0.13ms, graph=0%
+    [PiT-Mem N=100,000 sparse_1pct ef=48] R@10=1.0000, QPS=9529.1, P99=0.13ms, graph=0%
+    [PiT-Mem N=100,000 sparse_1pct ef=96] R@10=1.0000, QPS=10134.7, P99=0.12ms, graph=0%
+    [PiT-Mem N=100,000 sparse_1pct ef=192] R@10=1.0000, QPS=9520.3, P99=0.14ms, graph=0%
+    [PiT-Mem N=100,000 sparse_1pct ef=384] R@10=1.0000, QPS=10497.9, P99=0.11ms, graph=0%
+  [Exp 1 N=100,000] PiT-Mem built in 9.26s (391.4 MB, segs=1)
+  [Exp 1 N=100,000] Grid-SQ8-Scan built in 0.53s (370.0 MB)
+  [Exp 1 N=100,000] Merged 64 unchanged baseline rows from /content/local_ssd/pit-mem/results_prev/exp1_scalability_qps_recall.csv
+
+=== [Exp 1] Benchmarking Scale N = 500,000 (d=768) ===
+  [Exp 1 N=500,000 moderate_12pct] actual selectivity = 12.02% (~60,100 live)
+  [Exp 1 N=500,000 sparse_1pct] actual selectivity = 1.01% (~5,066 live)
+    [PiT-Mem N=500,000 moderate_12pct ef=24] R@10=0.7760, QPS=3402.9, P99=0.41ms, graph=100%
+    [PiT-Mem N=500,000 moderate_12pct ef=48] R@10=0.8470, QPS=2665.3, P99=0.46ms, graph=100%
+    [PiT-Mem N=500,000 moderate_12pct ef=96] R@10=0.8870, QPS=1718.1, P99=0.69ms, graph=100%
+    [PiT-Mem N=500,000 moderate_12pct ef=192] R@10=0.9310, QPS=1058.7, P99=1.22ms, graph=100%
+    [PiT-Mem N=500,000 moderate_12pct ef=384] R@10=0.9490, QPS=616.1, P99=1.91ms, graph=100%
+    [PiT-Mem N=500,000 sparse_1pct ef=24] R@10=0.9990, QPS=2301.7, P99=0.45ms, graph=0%
+    [PiT-Mem N=500,000 sparse_1pct ef=48] R@10=0.9990, QPS=2315.2, P99=0.46ms, graph=0%
+    [PiT-Mem N=500,000 sparse_1pct ef=96] R@10=0.9990, QPS=2308.1, P99=0.45ms, graph=0%
+    [PiT-Mem N=500,000 sparse_1pct ef=192] R@10=0.9990, QPS=2328.3, P99=0.51ms, graph=0%
+    [PiT-Mem N=500,000 sparse_1pct ef=384] R@10=0.9990, QPS=2365.2, P99=0.44ms, graph=0%
+  [Exp 1 N=500,000] PiT-Mem built in 51.33s (1956.9 MB, segs=3)
+  [Exp 1 N=500,000] Grid-SQ8-Scan built in 2.72s (1850.1 MB)
+  [Exp 1 N=500,000] Merged 64 unchanged baseline rows from /content/local_ssd/pit-mem/results_prev/exp1_scalability_qps_recall.csv
+
+=== [Exp 1] Benchmarking Scale N = 2,000,000 (d=768) ===
+  [Exp 1 N=2,000,000 moderate_12pct] actual selectivity = 11.98% (~239,666 live)
+  [Exp 1 N=2,000,000 sparse_1pct] actual selectivity = 0.97% (~19,466 live)
+    [PiT-Mem N=2,000,000 moderate_12pct ef=24] R@10=0.8640, QPS=1176.1, P99=1.32ms, graph=100%
+    [PiT-Mem N=2,000,000 moderate_12pct ef=48] R@10=0.8860, QPS=833.0, P99=1.81ms, graph=100%
+    [PiT-Mem N=2,000,000 moderate_12pct ef=96] R@10=0.9050, QPS=493.2, P99=2.97ms, graph=100%
+    [PiT-Mem N=2,000,000 moderate_12pct ef=192] R@10=0.9310, QPS=282.9, P99=4.92ms, graph=100%
+    [PiT-Mem N=2,000,000 moderate_12pct ef=384] R@10=0.9520, QPS=156.7, P99=8.47ms, graph=100%
+    [PiT-Mem N=2,000,000 sparse_1pct ef=24] R@10=1.0000, QPS=568.0, P99=1.96ms, graph=0%
+    [PiT-Mem N=2,000,000 sparse_1pct ef=48] R@10=1.0000, QPS=563.7, P99=2.15ms, graph=0%
+    [PiT-Mem N=2,000,000 sparse_1pct ef=96] R@10=1.0000, QPS=565.3, P99=2.15ms, graph=0%
+    [PiT-Mem N=2,000,000 sparse_1pct ef=192] R@10=1.0000, QPS=547.5, P99=2.29ms, graph=0%
+    [PiT-Mem N=2,000,000 sparse_1pct ef=384] R@10=1.0000, QPS=577.2, P99=1.83ms, graph=0%
+  [Exp 1 N=2,000,000] PiT-Mem built in 183.88s (7827.1 MB, segs=6)
+  [Exp 1 N=2,000,000] Grid-SQ8-Scan built in 10.65s (7400.5 MB)
+  [Exp 1 N=2,000,000] Merged 56 unchanged baseline rows from /content/local_ssd/pit-mem/results_prev/exp1_scalability_qps_recall.csv
+[Exp 1] Saved 232 rows -> results/colab_pro/exp1_scalability_qps_recall.csv
+
+[STOP-LOSS AUDITOR REPORT]: {
+  "stop_loss_triggered": false,
+  "verdict": "PASS_PROCEED_TO_PAPER",
+  "exp1_moderate_graph_trigger_pct": 100.0,
+  "exp1_w1a_max_recall_at_10": 0.952,
+  "exp1_moderate_graph_speedup_over_grid_scan": 15.71,
+  "exp1_w1b_pit_recall_at_10": 1.0,
+  "exp1_w1b_qps_ratio_vs_grid_scan": 1.055,
+  "min_sparse_scan_recall_at_10": 1.0,
+  "min_all_selectivity_recall_at_10": 0.893,
+  "mean_low_selectivity_p99_speedup_vs_hnsw": 44.5,
+  "max_pit_mem_lcr_pct": 0.0,
+  "mean_end_to_end_token_savings_pct": 75.72,
+  "min_rap_compact_covenant_qa_pct": 100.0,
+  "exp6_streaming_tail_max_cell_pct": 7.81,
+  "exp6_rows": 6
+}
+=== [Stage 4] Packaging Colab Pro Results ===
+-rw-r--r-- 1 root root  37K Nov 14 00:34 /content/colab_pro_results.tar.gz
+
+colab_pro/:
+total 144K
+-rw-r--r-- 1 root root  24K Nov 14 00:14 codex_gpt_6_1_sol_review_raw.md
+-rw-r--r-- 1 root root 7.9K Nov 14 00:14 codex_gpt_6_1_sol_review_summary.md
+-rw-r--r-- 1 root root  13K Nov 14 00:14 colab_pro_execution.log
+-rw-r--r-- 1 root root  643 Nov 14 00:14 corpus_manifold_stats.json
+-rw-r--r-- 1 root root  40K Nov 14 00:34 exp1_scalability_qps_recall.csv
+-rw-r--r-- 1 root root 6.8K Nov 14 00:14 exp2_selectivity_sweep.csv
+-rw-r--r-- 1 root root  717 Nov 14 00:14 exp3_clustered_burst.csv
+-rw-r--r-- 1 root root 2.0K Nov 14 00:14 exp3_restate_ingestion.csv
+-rw-r--r-- 1 root root  494 Nov 14 00:14 exp3_theta_ablation.csv
+-rw-r--r-- 1 root root 1.2K Nov 14 00:14 exp4_leakage_and_audit.csv
+-rw-r--r-- 1 root root 3.4K Nov 14 00:14 exp5_rap_compact_ablation.csv
+-rw-r--r-- 1 root root  539 Nov 14 00:14 exp5_tiered_hot_cold.csv
+-rw-r--r-- 1 root root 1.3K Nov 14 00:14 exp6_concurrent_mixed.csv
+-rw-r--r-- 1 root root 1.3K Nov 14 00:14 exp6_nvme_offload.csv
+-rw-r--r-- 1 root root 1.3K Nov 14 00:14 exp6_streaming_and_persistence.csv
+-rw-r--r-- 1 root root 1.3K Nov 14 00:14 hardware_env.json
+-rw-r--r-- 1 root root  607 Nov 14 00:34 stop_loss_audit_report.json
+ALL_COLAB_PRO_REVISION_BENCHMARKS_COMPLETE
