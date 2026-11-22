@@ -60,7 +60,7 @@ COMPARATOR_PATTERNS = [
     (OP_GE, False, re.compile(r"shall\s+not\s+be\s+less\s+than|is\s+at\s+least|at\s+least|minimum\s+of|no\s+less\s+than|>=", re.I)),
     (OP_GT, False, re.compile(r"exceeds?|greater\s+than|above|>", re.I)),
     (OP_LT, True, re.compile(r"falls?\s+below|less\s+than|<", re.I)),
-    (OP_EQ, False, re.compile(r"restated\s+to|revised\s+to|reported\s+at|equals?|=\s*", re.I)),
+    (OP_EQ, False, re.compile(r"restated\s+to|revised\s+to|reported\s+at|stands\s+at|equals?|=\s*|:\s*", re.I)),
 ]
 
 VALUE_PATTERN = re.compile(
@@ -92,8 +92,8 @@ def extract_risk_anchors(
     if doc_mm:
         doc_mat_tick = date_to_tick(doc_mm.group(1))
 
-    # Keep semicolon-linked legal remedy clauses attached to their covenant threshold sentence
-    sentences = re.split(r"(?<=\.)\s+", text)
+    # Keep semicolon-linked legal remedy clauses attached to their covenant threshold sentence; split on sentence/bullet breaks
+    sentences = re.split(r"(?:(?<=\.)\s+|\n+)", text)
 
     for sent in sentences:
         metric_spans = []

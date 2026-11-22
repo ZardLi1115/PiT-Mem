@@ -77,6 +77,8 @@ struct TxCommitStats {
     uint32_t tainted_reflections = 0;
     uint32_t dag_edges_traversed = 0;
     bool split_historical_slice = false;
+    bool committed = false;
+    uint64_t hist_slice_id = 0;
 };
 
 struct MVCCReadResult {
@@ -114,6 +116,8 @@ struct ConcurrentMixedStats {
     double reader_p95_us = 0.0;
     double reader_p99_us = 0.0;
     uint64_t total_writes = 0;
+    uint64_t attempted_writes = 0;
+    uint64_t rejected_writes = 0;
     double writer_ops_per_s = 0.0;
     double writer_p50_us = 0.0;
     double writer_p99_us = 0.0;
@@ -185,6 +189,8 @@ private:
 
 class LazyBranchMVCCEngine {
 public:
+    static constexpr uint64_t HIST_SLICE_BASE = (1ULL << 62);
+
     explicit LazyBranchMVCCEngine(const BiTHNSWConfig& idx_cfg, uint32_t hotness_thresh = 3)
         : index_(idx_cfg), dim_(idx_cfg.dim), hotness_thresh_(hotness_thresh) {}
 
@@ -220,7 +226,7 @@ public:
             rec.tk_s = tk_s[i];
             rec.tk_e = tk_e[i];
             records_[ids[i]] = std::move(rec);
-            if (ids[i] >= next_auto_id_) next_auto_id_ = ids[i] + 1;
+            if (ids[i] >= HIST_SLICE_BASE && ids[i] >= next_auto_id_) next_auto_id_ = ids[i] + 1;
         }
     }
 
@@ -229,13 +235,13 @@ public:
         cold_store_ = cold_store;
     }
 
-    void insert_raw(
+    bool insert_raw(
         uint64_t id,
         const float* vec,
         uint32_t tv_s, uint32_t tv_e,
         uint32_t tk_s, uint32_t tk_e) {
         std::unique_lock<PhaseFairSharedMutex> lk(rw_mu_);
-        if (records_.find(id) != records_.end() || tv_s >= tv_e || tk_s >= tk_e) return;
+        if (records_.find(id) != records_.end() || tv_s >= tv_e || tk_s >= tk_e) return false;
         begin_engine_wal_tx();
         index_.insert_single(id, vec, tv_s, tv_e, tk_s, tk_e);
         ProvenanceRecord rec;
@@ -246,9 +252,10 @@ public:
         rec.tk_s = tk_s;
         rec.tk_e = tk_e;
         records_[id] = std::move(rec);
-        if (id >= next_auto_id_) next_auto_id_ = id + 1;
+        if (id >= HIST_SLICE_BASE && id >= next_auto_id_) next_auto_id_ = id + 1;
         append_prov_wal_op(1, id, 0, 0, tv_s, tv_e, tk_s, tk_e, vec, nullptr, 0);
         commit_engine_wal_tx();
+        return true;
     }
 
     // Register causal provenance edges: reflection_id depends on parent_ids
@@ -306,8 +313,8 @@ public:
         std::vector<uint64_t> old_parents = it->second.parents;
         std::vector<uint64_t> old_children = it->second.children;
 
-        // Reserve caller-supplied new_id BEFORE allocating auto continuation ID!
-        if (new_id >= next_auto_id_) next_auto_id_ = new_id + 1;
+        // Allocate historical continuation ID strictly inside reserved HIST_SLICE_BASE namespace (zero collision with caller IDs!)
+        if (next_auto_id_ < HIST_SLICE_BASE) next_auto_id_ = HIST_SLICE_BASE;
         uint64_t hist_slice_id = next_auto_id_++;
         while (records_.find(hist_slice_id) != records_.end() || hist_slice_id == new_id) {
             hist_slice_id = next_auto_id_++;
@@ -395,6 +402,8 @@ public:
 
         auto t1 = std::chrono::steady_clock::now();
         st.latency_us = std::chrono::duration<double, std::micro>(t1 - t0).count();
+        st.committed = true;
+        st.hist_slice_id = hist_slice_id;
         return st;
     }
 
@@ -454,7 +463,7 @@ public:
         nrec.tk_e = INF_TICK;
         nrec.children = inherited_children;
         records_[new_id] = std::move(nrec);
-        if (new_id >= next_auto_id_) next_auto_id_ = new_id + 1;
+        if (new_id >= HIST_SLICE_BASE && new_id >= next_auto_id_) next_auto_id_ = new_id + 1;
 
         // 3) Zero-LLM Causal Lineage Taint Propagation (unconditional reverse-DAG BFS across all intermediates!)
         std::queue<uint64_t> bfs;
@@ -494,6 +503,7 @@ public:
 
         auto t1 = std::chrono::steady_clock::now();
         st.latency_us = std::chrono::duration<double, std::micro>(t1 - t0).count();
+        st.committed = true;
         return st;
     }
 
@@ -790,16 +800,27 @@ public:
             out.distances.resize(keep);
             out.item_tiers.resize(keep);
             out.cold_summaries.resize(keep);
+            std::unordered_set<uint64_t> kept_set;
+            kept_set.reserve(keep);
             for (std::size_t i = 0; i < keep; ++i) {
                 out.resolved_ids[i] = merged[i].id;
                 out.distances[i] = merged[i].dist;
                 out.item_tiers[i] = merged[i].tier;
                 out.cold_summaries[i] = std::move(merged[i].summary);
+                kept_set.insert(merged[i].id);
                 if (merged[i].tier == static_cast<uint8_t>(MemoryTier::COMPACT)) {
                     out.cold_items_returned++;
                 } else {
                     out.hot_items_returned++;
                 }
+            }
+            if (entity_filter.empty() && !out.matched_anchors.empty()) {
+                std::vector<RiskAnchorInput> filtered_anc;
+                filtered_anc.reserve(out.matched_anchors.size());
+                for (auto& a : out.matched_anchors) {
+                    if (kept_set.count(a.source_mem_id)) filtered_anc.push_back(std::move(a));
+                }
+                out.matched_anchors = std::move(filtered_anc);
             }
         }
 
@@ -888,8 +909,29 @@ public:
         }
 
         std::thread w_thread;
+        std::atomic<uint64_t> attempted_cnt{0};
+        std::atomic<uint64_t> rejected_cnt{0};
         if (num_write_ops > 0 && write_vecs != nullptr) {
-            w_thread = std::thread([&]() {
+            // Track active mutable lineage heads and their exact valid bounds so every EVOLVE/RESTATE satisfies preconditions
+            std::vector<uint64_t> cur_vids;
+            std::vector<uint32_t> cur_tvs;
+            std::vector<uint32_t> cur_tve;
+            if (victim_ids != nullptr) {
+                std::shared_lock<PhaseFairSharedMutex> lk(rw_mu_);
+                cur_vids.resize(num_write_ops, 0);
+                cur_tvs.resize(num_write_ops, 1u);
+                cur_tve.resize(num_write_ops, INF_TICK);
+                for (std::size_t i = 0; i < num_write_ops; ++i) {
+                    cur_vids[i] = victim_ids[i];
+                    auto it = records_.find(victim_ids[i]);
+                    if (it != records_.end()) {
+                        cur_tvs[i] = it->second.tv_s;
+                        cur_tve[i] = it->second.tv_e;
+                    }
+                }
+            }
+
+            w_thread = std::thread([&, cur_vids = std::move(cur_vids), cur_tvs = std::move(cur_tvs), cur_tve = std::move(cur_tve)]() mutable {
                 while (!start_flag.load(std::memory_order_acquire)) {}
                 std::size_t wi = 0;
                 uint64_t new_id_gen = 920000000ULL;
@@ -900,23 +942,51 @@ public:
                     uint64_t nid = new_id_gen++;
                     double u = static_cast<double>((wi * 2654435761ULL) & 0xFFFFu) / 65536.0;
 
+                    attempted_cnt.fetch_add(1, std::memory_order_relaxed);
+                    bool ok_commit = false;
                     auto w0 = std::chrono::steady_clock::now();
-                    if (u < insert_ratio || victim_ids == nullptr) {
+                    if (u < insert_ratio || cur_vids.empty()) {
                         uint32_t vs = (tk_now > 7200u) ? (tk_now - 7200u) : 1u;
-                        this->insert_raw(nid, wv, vs, INF_TICK, tk_now, INF_TICK);
+                        ok_commit = this->insert_raw(nid, wv, vs, INF_TICK, tk_now, INF_TICK);
                     } else if (u < insert_ratio + restate_ratio) {
-                        uint64_t vid = victim_ids[slot];
+                        uint64_t vid = cur_vids[slot];
                         TxCommitStats cs = this->apply_restate(vid, nid, wv, tk_now);
-                        tainted_sum.fetch_add(cs.tainted_reflections, std::memory_order_relaxed);
+                        ok_commit = cs.committed;
+                        if (ok_commit) {
+                            cur_vids[slot] = nid;
+                            tainted_sum.fetch_add(cs.tainted_reflections, std::memory_order_relaxed);
+                        }
                     } else {
-                        uint64_t vid = victim_ids[slot];
-                        uint32_t tv_chg = (tk_now > 86400u) ? (tk_now - 86400u) : 1u;
-                        TxCommitStats cs = this->apply_evolve(vid, nid, wv, tv_chg, INF_TICK, tk_now);
-                        tainted_sum.fetch_add(cs.tainted_reflections, std::memory_order_relaxed);
+                        uint64_t vid = cur_vids[slot];
+                        uint32_t lo_v = cur_tvs[slot];
+                        uint32_t hi_v = cur_tve[slot];
+                        uint32_t cap_hi = (hi_v == INF_TICK) ? std::max<uint32_t>(lo_v + 7200u, tk_now) : hi_v;
+                        if (lo_v + 2u < cap_hi && cap_hi <= hi_v) {
+                            uint32_t tv_chg = lo_v + std::max<uint32_t>(1u, (cap_hi - lo_v) / 4u);
+                            TxCommitStats cs = this->apply_evolve(vid, nid, wv, tv_chg, hi_v, tk_now);
+                            ok_commit = cs.committed;
+                            if (ok_commit) {
+                                cur_vids[slot] = nid;
+                                cur_tvs[slot] = tv_chg;
+                                tainted_sum.fetch_add(cs.tainted_reflections, std::memory_order_relaxed);
+                            }
+                        } else {
+                            // Fallback to RESTATE if valid interval exhausted width < 2 ticks
+                            TxCommitStats cs = this->apply_restate(vid, nid, wv, tk_now);
+                            ok_commit = cs.committed;
+                            if (ok_commit) {
+                                cur_vids[slot] = nid;
+                                tainted_sum.fetch_add(cs.tainted_reflections, std::memory_order_relaxed);
+                            }
+                        }
                     }
                     auto w1 = std::chrono::steady_clock::now();
-                    latest_tk_published.store(tk_now, std::memory_order_relaxed);
-                    writer_lats.push_back(std::chrono::duration<double, std::micro>(w1 - w0).count());
+                    if (ok_commit) {
+                        latest_tk_published.store(tk_now, std::memory_order_relaxed);
+                        writer_lats.push_back(std::chrono::duration<double, std::micro>(w1 - w0).count());
+                    } else {
+                        rejected_cnt.fetch_add(1, std::memory_order_relaxed);
+                    }
                     wi++;
                     if (wi >= num_write_ops) break;
                 }
@@ -951,6 +1021,8 @@ public:
         }
 
         out.total_writes = writer_lats.size();
+        out.attempted_writes = attempted_cnt.load(std::memory_order_relaxed);
+        out.rejected_writes = rejected_cnt.load(std::memory_order_relaxed);
         out.writer_ops_per_s = (out.elapsed_sec > 0.0) ? (static_cast<double>(out.total_writes) / out.elapsed_sec) : 0.0;
         if (!writer_lats.empty()) {
             std::sort(writer_lats.begin(), writer_lats.end());
@@ -1426,7 +1498,7 @@ private:
     BiTHNSWIndex index_;
     std::size_t dim_;
     uint32_t hotness_thresh_;
-    uint64_t next_auto_id_ = 100000000ULL;
+    uint64_t next_auto_id_ = HIST_SLICE_BASE;
     std::unordered_map<uint64_t, ProvenanceRecord> records_;
     std::unordered_map<uint64_t, std::pair<uint64_t, uint32_t>> succ_map_; // old_id -> (new_id, restate_tk)
     std::unordered_map<uint64_t, std::vector<EvolveSplitInfo>> evolve_slices_; // old_id -> list of EvolveSplitInfo
@@ -1589,7 +1661,7 @@ private:
             rec.tv_s = hdr.tv_s; rec.tv_e = hdr.tv_e;
             rec.tk_s = hdr.tk_s; rec.tk_e = hdr.tk_e;
             records_[hdr.id1] = std::move(rec);
-            if (hdr.id1 >= next_auto_id_) next_auto_id_ = hdr.id1 + 1;
+            if (hdr.id1 >= HIST_SLICE_BASE && hdr.id1 >= next_auto_id_) next_auto_id_ = hdr.id1 + 1;
             return true;
         } else if (hdr.op == 2 && hdr.payload_bytes == par_bytes) {
             auto it = records_.find(hdr.id1);
@@ -1652,7 +1724,8 @@ private:
             }
             records_[new_id] = std::move(nrec);
             bind_parents_and_inherit_taint(records_[new_id]);
-            if (std::max(new_id, hist_slice_id) >= next_auto_id_) next_auto_id_ = std::max(new_id, hist_slice_id) + 1;
+            if (hist_slice_id >= HIST_SLICE_BASE && hist_slice_id >= next_auto_id_) next_auto_id_ = hist_slice_id + 1;
+            if (new_id >= HIST_SLICE_BASE && new_id >= next_auto_id_) next_auto_id_ = new_id + 1;
 
             std::queue<uint64_t> e_bfs;
             std::unordered_set<uint64_t> e_seen;
@@ -1698,7 +1771,7 @@ private:
             nrec.tv_s = orig_tvs; nrec.tv_e = orig_tve; nrec.tk_s = tk_now; nrec.tk_e = INF_TICK;
             nrec.children = inherited_children;
             records_[new_id] = std::move(nrec);
-            if (new_id >= next_auto_id_) next_auto_id_ = new_id + 1;
+            if (new_id >= HIST_SLICE_BASE && new_id >= next_auto_id_) next_auto_id_ = new_id + 1;
 
             std::queue<uint64_t> bfs;
             std::unordered_set<uint64_t> seen;
@@ -1898,7 +1971,7 @@ private:
         rec.parents = parent_ids;
         records_[reflection_id] = std::move(rec);
         bind_parents_and_inherit_taint(records_[reflection_id]);
-        if (reflection_id >= next_auto_id_) next_auto_id_ = reflection_id + 1;
+        if (reflection_id >= HIST_SLICE_BASE && reflection_id >= next_auto_id_) next_auto_id_ = reflection_id + 1;
     }
 
     void collect_clean_parents_for_repair(

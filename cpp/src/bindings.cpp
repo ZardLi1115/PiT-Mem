@@ -165,6 +165,9 @@ PYBIND11_MODULE(pit_mem_core, m) {
         .def("sealed_segments_cell_counts", &BiTHNSWIndex::sealed_segments_cell_counts)
         .def("corpus_cell_counts", &BiTHNSWIndex::corpus_cell_counts)
         .def("memory_bytes", &BiTHNSWIndex::memory_bytes)
+        .def("total_ram_bytes", &BiTHNSWIndex::total_ram_bytes)
+        .def("non_graph_ram_bytes", &BiTHNSWIndex::non_graph_ram_bytes)
+        .def("verify_identical_state", &BiTHNSWIndex::verify_identical_state)
         .def("mmap_bytes", &BiTHNSWIndex::mmap_bytes)
         .def("offload_fp32_to_mmap", &BiTHNSWIndex::offload_fp32_to_mmap,
              py::arg("dir_path"), py::arg("include_active") = true, py::arg("drop_os_cache") = false)
@@ -175,7 +178,9 @@ PYBIND11_MODULE(pit_mem_core, m) {
         .def_readonly("latency_us", &TxCommitStats::latency_us)
         .def_readonly("tainted_reflections", &TxCommitStats::tainted_reflections)
         .def_readonly("dag_edges_traversed", &TxCommitStats::dag_edges_traversed)
-        .def_readonly("split_historical_slice", &TxCommitStats::split_historical_slice);
+        .def_readonly("split_historical_slice", &TxCommitStats::split_historical_slice)
+        .def_readonly("committed", &TxCommitStats::committed)
+        .def_readonly("hist_slice_id", &TxCommitStats::hist_slice_id);
 
     py::class_<MVCCReadResult>(m, "MVCCReadResult")
         .def_readonly("resolved_ids", &MVCCReadResult::resolved_ids)
@@ -210,6 +215,8 @@ PYBIND11_MODULE(pit_mem_core, m) {
         .def_readonly("reader_p95_us", &ConcurrentMixedStats::reader_p95_us)
         .def_readonly("reader_p99_us", &ConcurrentMixedStats::reader_p99_us)
         .def_readonly("total_writes", &ConcurrentMixedStats::total_writes)
+        .def_readonly("attempted_writes", &ConcurrentMixedStats::attempted_writes)
+        .def_readonly("rejected_writes", &ConcurrentMixedStats::rejected_writes)
         .def_readonly("writer_ops_per_s", &ConcurrentMixedStats::writer_ops_per_s)
         .def_readonly("writer_p50_us", &ConcurrentMixedStats::writer_p50_us)
         .def_readonly("writer_p99_us", &ConcurrentMixedStats::writer_p99_us)
@@ -402,6 +409,73 @@ PYBIND11_MODULE(pit_mem_core, m) {
         .def("save_segment_file", &RAPCompactStore::save_segment_file)
         .def("load_segment_file", &RAPCompactStore::load_segment_file)
         .def("serialized_bytes", &RAPCompactStore::serialized_bytes);
+
+    // Official Upstream Open-Source Library Baseline (nmslib/hnswlib v0.8.0)
+    py::class_<OfficialHNSWLibIndex>(m, "OfficialHNSWLibIndex")
+        .def(py::init<std::size_t, uint32_t, uint32_t>(),
+             py::arg("dim"), py::arg("m") = 16, py::arg("ef_construction") = 96)
+        .def("build_batch", [](
+            OfficialHNSWLibIndex& self,
+            py::array_t<uint64_t, py::array::c_style | py::array::forcecast> ids,
+            py::array_t<float, py::array::c_style | py::array::forcecast> vecs,
+            py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tv_s,
+            py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tv_e,
+            py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tk_s,
+            py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tk_e,
+            int num_threads) {
+            std::size_t n = static_cast<std::size_t>(ids.shape(0));
+            const uint64_t* p_ids = ids.data();
+            const float* p_vecs = vecs.data();
+            const uint32_t* p_tvs = tv_s.data();
+            const uint32_t* p_tve = tv_e.data();
+            const uint32_t* p_tks = tk_s.data();
+            const uint32_t* p_tke = tk_e.data();
+            py::gil_scoped_release release;
+            self.build_batch(p_ids, p_vecs, p_tvs, p_tve, p_tks, p_tke, n, num_threads);
+        }, py::arg("ids"), py::arg("vecs"), py::arg("tv_s"), py::arg("tv_e"),
+           py::arg("tk_s"), py::arg("tk_e"), py::arg("num_threads") = 0)
+        .def("update_tx_end", &OfficialHNSWLibIndex::update_tx_end)
+        .def("search_batch", [](
+            const OfficialHNSWLibIndex& self,
+            py::array_t<float, py::array::c_style | py::array::forcecast> q_vecs,
+            py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tv_qs,
+            py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tk_qs,
+            uint32_t k, uint32_t ef_search) {
+            std::size_t nq = static_cast<std::size_t>(q_vecs.shape(0));
+            std::size_t dim = static_cast<std::size_t>(q_vecs.shape(1));
+            const float* pq = q_vecs.data();
+            const uint32_t* ptv = tv_qs.data();
+            const uint32_t* ptk = tk_qs.data();
+            std::vector<QueryResult> res(nq);
+            {
+                py::gil_scoped_release release;
+                for (std::size_t i = 0; i < nq; ++i) {
+                    res[i] = self.search(pq + i * dim, ptv[i], ptk[i], k, ef_search);
+                }
+            }
+            return res;
+        })
+        .def("search_acorn1_batch", [](
+            const OfficialHNSWLibIndex& self,
+            py::array_t<float, py::array::c_style | py::array::forcecast> q_vecs,
+            py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tv_qs,
+            py::array_t<uint32_t, py::array::c_style | py::array::forcecast> tk_qs,
+            uint32_t k, uint32_t ef_search) {
+            std::size_t nq = static_cast<std::size_t>(q_vecs.shape(0));
+            std::size_t dim = static_cast<std::size_t>(q_vecs.shape(1));
+            const float* pq = q_vecs.data();
+            const uint32_t* ptv = tv_qs.data();
+            const uint32_t* ptk = tk_qs.data();
+            std::vector<QueryResult> res(nq);
+            {
+                py::gil_scoped_release release;
+                for (std::size_t i = 0; i < nq; ++i) {
+                    res[i] = self.search_acorn1(pq + i * dim, ptv[i], ptk[i], k, ef_search);
+                }
+            }
+            return res;
+        })
+        .def("memory_bytes", &OfficialHNSWLibIndex::memory_bytes);
 
     // Fair C++ Baselines
     py::class_<HNSWPostIndex>(m, "HNSWPostIndex")

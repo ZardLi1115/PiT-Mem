@@ -22,22 +22,22 @@ pit-mem/
 │   │   ├── bit_hnsw.hpp                 # Streaming Causal Macro-Segment BiT-HNSW, Vitter lag-convolution reservoir, analytical cost router, mmap offload & WAL
 │   │   ├── mvcc_provenance.hpp          # SQL:2011 EVOLVE/RESTATE, PVWL transactional WAL, PITMANF1 atomic snapshots, adaptive k_fetch Lazy-Branch MVCC
 │   │   ├── rap_compact.hpp              # RAP-Compact ("PIT3"): unit-hypersphere SQ8 centroids, 56B IEEE-754 anchor slots, unified hot+cold tiered search
-│   │   └── baselines_cpp.hpp            # Native C++17 baselines (Grid-SQ8-Scan, ACORN-BiTemp 2-Hop, HNSW-Post, SeRF-Adapt, DSG-1D)
+│   │   └── baselines_cpp.hpp            # In-house C++17 bi-temporal adaptations (Grid-SQ8-Scan, ACORN-Style, HNSW-Flat, SeRF-Style, DSG-Style) + vendored nmslib/hnswlib v0.8.0 bindings
 │   ├── src/bindings.cpp                 # Zero-copy pybind11 NumPy bindings with GIL release
 │   └── setup.py / CMakeLists.txt        # C++17 build configuration (-O3 -std=c++17 -mavx2 -mfma -fopenmp)
 ├── pit_mem/                             # Python data pipeline, external DBMS baselines, benchmark runner, and plotting
 │   ├── covenant_parser.py               # Schema-parameterized multi-span covenant & SEC XBRL slot extractor
 │   ├── data_pipeline/                   # FinPiT-Bench builders (St. Louis Fed ALFRED, post-2025 SEC EDGAR XBRL/8-K Item 4.02, financial news) & BGE embedding
-│   ├── baselines/                       # Tuned PostgreSQL + pgvector v0.8 (PG-BiTemp), Zep/Graphiti, Mem0-Overwrite, Naive-GraphRAG
+│   ├── baselines/                       # Tuned PostgreSQL + pgvector v0.8 (PG-BiTemp) and Exp 4 surrogate memory policies (Latest-Summary, Overwrite, Append-Only)
 │   ├── benchmarks/                      # End-to-end benchmark suite (Exp 1–Exp 6D) and unit/concurrency regression tests
 │   └── plotting/                        # Publication vector PDF figure generator & automated CSV-to-LaTeX macro/table generator
 ├── data/
-│   └── raw_seed/                        # 431,217 authentic deduplicated financial seed passages + Protocols A & B audit sets
+│   └── raw_seed/                        # 431,217 deduplicated public financial seed passages + Protocols A & B audit sets
 ├── results/
-│   ├── colab_pro/                       # Verified N = 2,000,000 NVIDIA A100-SXM4-80GB (12 vCPU, 167 GiB RAM, NVMe SSD) CSVs & logs
+│   ├── colab_pro/                       # Archived N = 2,000,000 NVIDIA A100-SXM4-80GB (12 vCPU, 167 GiB RAM, NVMe SSD) CSVs & logs
 │   └── local_pilot/                     # Fast local CPU regression CSVs
 ├── notebooks/                           # Interactive Google Colab Pro reproduction notebooks (00–03)
-└── paper/                               # Official PVLDB Vol. 20 LaTeX sources, generated macros/tables, figures, and PiT-Mem_PVLDB.pdf
+└── paper/                               # Official PVLDB Vol. 20 (VLDB-Template) LaTeX sources, generated macros/tables, figures, and PiT-Mem_PVLDB.pdf
 ```
 
 ---
@@ -117,7 +117,7 @@ Every metric macro (`paper/generated_metrics.tex`), table (`paper/generated_tabl
 
 ```bash
 # Regenerate vector figures (Figures 1–7) and LaTeX metric/table macros (Tables 3–7)
-PYTHONPATH=. python3 -m pit_mem.plotting.generate_figures --results-dir results/colab_pro --out-dir paper/figures
+PYTHONPATH=. python3 -m pit_mem.plotting.generate_figures results/colab_pro paper/figures
 PYTHONPATH=. python3 -m pit_mem.plotting.generate_latex_macros --results-dir results/colab_pro --out-tex-dir paper
 
 # Compile official single-blind PVLDB Vol. 20 PDF (paper/PiT-Mem_PVLDB.pdf)

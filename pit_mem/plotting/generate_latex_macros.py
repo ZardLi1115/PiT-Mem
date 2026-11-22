@@ -517,12 +517,12 @@ def generate_macros_and_tables(results_dir: str, out_tex_dir: str) -> None:
     t1_rows = []
     sys_order = [
         ("PiT-Mem", "\\textbf{PiT-Mem (Ours)}"),
-        ("Grid-SQ8-Scan", "Grid-SQ8-Scan (No Graph)"),
-        ("ACORN-BiTemp", "ACORN-BiTemp (2-Hop)"),
-        ("HNSW-Post", "HNSW-Post (RNG)"),
-        ("SeRF-Adapt", "SeRF-Adapt ($t_v^s$)"),
-        ("DSG-1D", "DSG-1D ($t_k^s$)"),
-        ("Zep/Graphiti", "Zep/Graphiti"),
+        ("Grid-SQ8-Scan", "Grid-SQ8-Scan (2D Linear)"),
+        ("ACORN-BiTemp", "ACORN-Style (C++ 2-Hop)"),
+        ("HNSW-Post", "HNSW-Flat (C++ Post)"),
+        ("SeRF-Adapt", "SeRF-Style 1D ($t_v^s$)"),
+        ("DSG-1D", "DSG-Style 1D ($t_k^s$)"),
+        ("Zep/Graphiti", "Graphiti-Style (HNSW+SQL)"),
         ("PG-BiTemp", "PG-BiTemp (\\texttt{pgvector})"),
     ]
     for reg_code, reg_title in [
@@ -561,9 +561,11 @@ def generate_macros_and_tables(results_dir: str, out_tex_dir: str) -> None:
                         f"{mem_gb:.2f}~GiB ({core_gb:.2f}~GiB core)"
                         if mem_gb >= 1.0 else f"{r['mem_mb']:.0f}~MiB ({core_mb:.0f}~MiB core)"
                     )
+                elif sys_code == "PG-BiTemp":
+                    mem_str = f"{mem_gb:.2f}~GiB rel." if mem_gb >= 1.0 else f"{r['mem_mb']:.0f}~MiB rel."
                 else:
                     mem_str = f"{mem_gb:.2f}~GiB" if mem_gb >= 1.0 else f"{r['mem_mb']:.0f}~MiB"
-                qps_s = f"{r['qps']:,.0f}" if r["qps"] >= 100 else f"{r['qps']:.1f}"
+                qps_s = (f"{r['qps']:,.0f}" if r["qps"] >= 100 else f"{r['qps']:.1f}").replace(",", "{,}")
                 t1_rows.append(
                     f"{sc_label} & {sys_disp} & "
                     f"{bold_l}{qps_s}{bold_r} & "
@@ -577,28 +579,43 @@ def generate_macros_and_tables(results_dir: str, out_tex_dir: str) -> None:
     if t1_rows and t1_rows[-1] == "\\midrule":
         t1_rows.pop()
 
-    # --- Table Exp 4: Leakage & Audit ---
+    # --- Table Exp 4: Leakage & Audit (120+120 evaluated cases, honest surrogate policy labels, no synthetic Sharpe) ---
+    disp_e4 = {
+        "PiT-Mem (Full)": "\\textbf{PiT-Mem (Full)}",
+        "PiT-Mem (w/o Lazy-Branch)": "PiT-Mem (w/o Lazy-Branch)",
+        "Zep/Graphiti": "Latest-Summary (Graphiti-st.)",
+        "Zep/Graphiti (Community)": "Latest-Summary (Graphiti-st.)",
+        "Mem0-Overwrite": "Overwrite (Mem0-st.)",
+        "Naive-GraphRAG": "Append-Only (GraphRAG-st.)",
+    }
     t4_rows = []
     for _, r in df4.iterrows():
         proto = "Proto A (SEC)" if "Protocol_A" in r["protocol"] else "Proto B (Cov.)"
-        sys_n = str(r["system"]).replace("&", "\\&").replace(" (BiTemp-Graph)", "")
-        if "PiT-Mem (Full)" in sys_n:
-            sys_n = "\\textbf{PiT-Mem (Full)}"
+        raw_sn = str(r["system"]).replace(" (BiTemp-Graph)", "")
+        sys_n = disp_e4.get(raw_sn, raw_sn.replace("&", "\\&"))
+        is_p = "PiT-Mem (Full)" in raw_sn
+        bl, br = ("\\textbf{", "}") if is_p else ("", "")
         t4_rows.append(
-            f"{proto} & {sys_n} & {r['lcr_pct']:.1f}\\% & {r['stale_taint_pct']:.1f}\\% & "
-            f"{r['audit_f1_pct']:.1f}\\% & {r['backtest_sharpe']:.2f} ({r['sharpe_inflation']:+.2f}) \\\\"
+            f"{proto} & {sys_n} & {int(r['num_cases'])} & {bl}{r['lcr_pct']:.1f}\\%{br} & "
+            f"{bl}{r['stale_taint_pct']:.1f}\\%{br} & {bl}{r['audit_f1_pct']:.1f}\\%{br} \\\\"
         )
 
-    # --- Table Exp 5: RAP-Compact vs Columnar/Relational & Lossy Baselines + Unified Tiered Search ---
+    # --- Table Exp 5: RAP-Compact vs External Stores & Lossy Baselines (Honest Execution & Template Scope) ---
+    disp_e5 = {
+        "RAP-Compact (Ours)": "\\textbf{RAP-Compact (Res.\\ C++, SQ8)}",
+        "Parquet-Zstd + Medoid": "Parquet-Zstd (File Read, FP32)",
+        "SQLite-BTree + Medoid": "SQLite-BTree (In-Mem, FP32)",
+        "LLM-Abstractive-Summary": "LLM-Summary (Trunc.\\ Prompt)",
+        "Centroid-MeanPool": "Centroid-MeanPool",
+        "Narrative-Truncation": "Narrative-Truncation",
+    }
     t5_rows = []
     sub5 = df5_cov[df5_cov["target_budget"] == 0.25]
     lossless_set = {"RAP-Compact (Ours)", "Parquet-Zstd + Medoid", "SQLite-BTree + Medoid"}
     for _, r in sub5.iterrows():
         raw_m_name = str(r["method"])
-        m_n = raw_m_name.replace("&", "\\&")
-        is_ours = "RAP-Compact" in m_n
-        if is_ours:
-            m_n = "\\textbf{RAP-Compact (Ours, Proto B)}"
+        m_n = disp_e5.get(raw_m_name, raw_m_name.replace("&", "\\&"))
+        is_ours = "RAP-Compact" in raw_m_name
         bl = "\\textbf{" if is_ours else ""
         br = "}" if is_ours else ""
         lat_cell = f"{bl}{r['query_lat_us']:,.1f}{br}".replace(",", "{,}") if raw_m_name in lossless_set else "---"
@@ -612,7 +629,7 @@ def generate_macros_and_tables(results_dir: str, out_tex_dir: str) -> None:
         ws = df5_sec.iloc[0]
         t5_rows.append("\\midrule")
         t5_rows.append(
-            f"\\textbf{{RAP-Compact (SEC EDGAR XBRL)}} & "
+            f"\\textbf{{RAP-Compact (XBRL Templated)}} & "
             f"{ws['actual_space_fraction']*100:.1f}\\% (\\textbf{{{ws['compression_ratio']:.1f}$\\times$}}) & "
             f"\\textbf{{{ws['query_lat_us']:.1f}}} & "
             f"{ws['threshold_exact_acc_pct']:.1f}\\% & {ws['polarity_clause_recall_pct']:.1f}\\% & "
@@ -628,23 +645,24 @@ def generate_macros_and_tables(results_dir: str, out_tex_dir: str) -> None:
             is_p = "PiT-Mem" in vn
             bl, br = ("\\textbf{", "}") if is_p else ("", "")
             sealed_v = float(r.get("sealed_max_cell_pct", r["max_cell_share_pct"]))
+            qps_f = f"{r['qps']:,.0f}".replace(",", "{,}")
             t6_s_rows.append(
                 f"{bl}{vn}{br} & {int(r['num_segments'])} & {r['cell_15_15_pct']:.1f}\\% & "
-                f"{sealed_v:.1f}\\% / {r['max_cell_share_pct']:.1f}\\% & {bl}{r['qps']:,.0f}{br} & "
+                f"{sealed_v:.1f}\\% / {r['max_cell_share_pct']:.1f}\\% & {bl}{qps_f}{br} & "
                 f"{bl}{r['p99_lat_ms']:.2f}{br} & {r['recall_at_10']*100:.1f}\\% \\\\"
             )
         t6_block = (
             "\\newcommand{\\TableExpSix}{%\n"
             "\\begin{table}[t]\n\\centering\n"
             "\\caption{Exp 6A: Chronological streaming arrival ($N = \\StreamScale$, $\\sigma \\approx 0.2\\%$) "
-            "comparing frozen boot-grid calibration against online causal macro-segment rollover (Vitter lag reservoir + $>\\!20\\%$ skew guard; Sealed / Tail Max report max cell share in aggregated sealed grid and active tail) and offline oracle bounds.}\n"
-            "\\label{tab:exp6}\n\\small\n{\\renewcommand{\\arraystretch}{0.88}\n"
+            "comparing a frozen 5\\%-bootstrap grid against online causal macro-segment rollover (Vitter lag reservoir + $>\\!20\\%$ skew guard; Sealed / Tail Max report max cell share in aggregated sealed grid and active tail) and offline oracle bounds.}\n"
+            "\\label{tab:exp6}\n\\small\n"
             "\\resizebox{\\columnwidth}{!}{%\n"
             "\\begin{tabular}{lcccccc}\n\\toprule\n"
             "\\textbf{Grid Policy} & \\textbf{Segs} & \\textbf{Tail $(15,15)$} & \\textbf{Sealed / Tail Max} & "
             "\\textbf{1T QPS} & \\textbf{P99 (ms)} & \\textbf{R@10} \\\\\n\\midrule\n"
             + "\n".join(t6_s_rows)
-            + "\n\\bottomrule\n\\end{tabular}}}\n\\end{table}}\n"
+            + "\n\\bottomrule\n\\end{tabular}}\n\\end{table}}\n"
         )
 
     t6_sys_block = ""
@@ -653,38 +671,47 @@ def generate_macros_and_tables(results_dir: str, out_tex_dir: str) -> None:
         for _, r in df_off.iterrows():
             ef_tag = f", $ef\\!=\\!{int(r['param_ef'])}$" if "param_ef" in r and pd.notna(r["param_ef"]) else ""
             wl_s = f"W1A ($12\\%${ef_tag})" if "moderate" in str(r["regime"]) else f"W1B ($1\\%${ef_tag})"
-            md_s = str(r["mode"]).replace(" (FP32 Resident)", "").replace(" Page Faults", " Faults")
+            md_s = (
+                str(r["mode"])
+                .replace(" (FP32 Resident)", "")
+                .replace("Cold Page Faults", "Post-Evict Req.")
+            )
             bl, br = ("\\textbf{", "}") if "Warm" in md_s else ("", "")
+            q1_s = f"{r['qps_1t']:,.0f}".replace(",", "{,}")
+            q12_s = f"{r['qps_12t']:,.0f}".replace(",", "{,}")
             off_tbl_rows.append(
                 f"{wl_s} & {bl}{md_s}{br} & {r['ram_mb']/1024.0:.2f}~GiB & "
-                f"{bl}{r['qps_1t']:,.0f}{br} / {r['qps_12t']:,.0f} & "
+                f"{bl}{q1_s}{br} / {q12_s} & "
                 f"{r['p99_lat_ms']:.2f} & {r['recall_at_10']*100:.1f}\\% \\\\"
             )
         conc_tbl_rows = []
         for _, r in df_conc[df_conc["workload"].str.startswith("Mixed")].iterrows():
             nt = int(r["reader_threads"])
             ro_m = df_conc[(df_conc["reader_threads"] == nt) & (df_conc["workload"].str.startswith("Read-Only"))].iloc[0]
+            ro_q = f"{ro_m['reader_qps']:,.0f}".replace(",", "{,}")
+            rw_q = f"{r['reader_qps']:,.0f}".replace(",", "{,}")
+            wr_q = f"{r['writer_ops_per_s']:,.0f}".replace(",", "{,}")
             conc_tbl_rows.append(
-                f"{nt}T & {ro_m['reader_qps']:,.0f} ({ro_m['reader_p99_ms']:.2f}) & "
-                f"\\textbf{{{r['reader_qps']:,.0f}}} (\\textbf{{{r['reader_p99_ms']:.2f}}}) & "
-                f"{r['writer_ops_per_s']:,.0f} & {int(r['rollovers_triggered'])} / {int(r['cardinality_violations'])} \\\\"
+                f"{nt}T & {ro_q} ({ro_m['reader_p99_ms']:.2f}) & "
+                f"\\textbf{{{rw_q}}} (\\textbf{{{r['reader_p99_ms']:.2f}}}) & "
+                f"{wr_q} & {int(r['rollovers_triggered'])} / {int(r['cardinality_violations'])} \\\\"
             )
         t6_sys_block = (
             "\n\\newcommand{\\TableExpSixSys}{%\n"
             "\\begin{table}[t]\n\\centering\n"
-            "\\caption{Top (Exp 6C, $N = \\MaxCorpusScale$): POSIX \\texttt{mmap} cold-FP32 NVMe offload (\\CoreIndexBytesPerRec~B/rec RAM). "
-            "Bottom (Exp 6D, $N = \\ConcScale$): \\texttt{PhaseFairSharedMutex} concurrent readers ($1$--$12$T) + streaming \\texttt{INSERT}/\\texttt{EVOLVE}/\\texttt{RESTATE}/rollover.}\n"
-            "\\label{tab:exp6_sys}\n\\scriptsize\n{\\renewcommand{\\arraystretch}{0.85}\n"
+            "\\caption{Top (Exp 6C, $N = \\MaxCorpusScale$): POSIX \\texttt{mmap} cold-FP32 offload showing counted core index-array bytes (\\CoreIndexBytesPerRec~B/rec, excluding auxiliary ID hash-map and file-backed OS page-cache residency; Post-Evict Req.\\ issues advisory \\texttt{DONTNEED} requests per micro-batch). "
+            "Bottom (Exp 6D, $N = \\ConcScale$): \\texttt{PhaseFairSharedMutex} concurrent readers ($1$--$12$T) + attempted mixed-stream writer ops/s.}\n"
+            "\\label{tab:exp6_sys}\n\\small\n"
             "\\resizebox{\\columnwidth}{!}{%\n"
             "\\begin{tabular}{llrrrr}\n\\toprule\n"
-            "\\textbf{Regime} & \\textbf{FP32 Tier Mode} & \\textbf{Res.\\ RAM} & \\textbf{1T / 12T QPS} & \\textbf{P99 (ms)} & \\textbf{R@10} \\\\\n\\midrule\n"
+            "\\textbf{Regime} & \\textbf{FP32 Tier Mode} & \\textbf{Core Arrays} & \\textbf{1T / 12T QPS} & \\textbf{P99 (ms)} & \\textbf{R@10} \\\\\n\\midrule\n"
             + "\n".join(off_tbl_rows)
-            + "\n\\bottomrule\n\\end{tabular}}\\\\[1pt]\n"
+            + "\n\\bottomrule\n\\end{tabular}}\\\\[4pt]\n"
             "\\resizebox{\\columnwidth}{!}{%\n"
             "\\begin{tabular}{lrrrr}\n\\toprule\n"
-            "\\textbf{Readers} & \\textbf{RO QPS (P99 ms)} & \\textbf{Mixed QPS (P99 ms)} & \\textbf{Writer (ops/s)} & \\textbf{Rollover / Viol.} \\\\\n\\midrule\n"
+            "\\textbf{Readers} & \\textbf{RO QPS (P99 ms)} & \\textbf{Mixed QPS (P99 ms)} & \\textbf{Attempts (ops/s)} & \\textbf{Rollover / Viol.} \\\\\n\\midrule\n"
             + "\n".join(conc_tbl_rows)
-            + "\n\\bottomrule\n\\end{tabular}}}\n\\end{table}}\n"
+            + "\n\\bottomrule\n\\end{tabular}}\n\\end{table}}\n"
         )
 
     tables_tex = (
@@ -692,34 +719,35 @@ def generate_macros_and_tables(results_dir: str, out_tex_dir: str) -> None:
         "\\newcommand{\\TableExpOne}{%\n"
         "\\begin{table*}[t]\n\\centering\n"
         "\\caption{Exp 1: Single-thread wall-clock QPS ($\\text{QPS} = N_q / T_{\\text{wall}}$), Mean/P50/P99 latency, Recall@10, "
-        "causal-graph trigger share, build time, and memory footprint up to $N = \\MaxCorpusScale$ under Workload 1A ($\\sigma \\approx 12\\%$) and Workload 1B ($\\sigma \\approx 1.0\\%$). "
-        "For PiT-Mem, we report All-RAM total alongside the \\CoreIndexBytesPerRec~B/rec core index array footprint (at 2M: $ef=192$ on W1A, $ef=96$ on W1B; matched POSIX \\texttt{mmap} cold-FP32 NVMe offload at $\\CoreIndexRAMGiB$~GiB resident RAM is evaluated in Table~\\ref{tab:exp6_sys}).}\n"
-        "\\label{tab:exp1_detail}\n\\scriptsize\n{\\renewcommand{\\arraystretch}{0.86}\n"
+        "causal-graph trigger share, build time, and footprint up to $N = \\MaxCorpusScale$ under Workload 1A ($\\sigma \\approx 12\\%$) and Workload 1B ($\\sigma \\approx 1.0\\%$). "
+        "C++17 baselines (\\texttt{ACORN-Style}, \\texttt{HNSW-Flat}, \\texttt{SeRF-Style}, \\texttt{DSG-Style}, \\texttt{Graphiti-Style}) are in-house bi-temporal adaptations; "
+        "PiT-Mem reports counted All-RAM and \\CoreIndexBytesPerRec~B/rec core index-array bytes (excluding ID hash-map/OS page cache), whereas \\texttt{PG-BiTemp} reports on-disk \\texttt{pg\\_total\\_relation\\_size} (\\texttt{rel.}) and client-server wall-clock QPS.}\n"
+        "\\label{tab:exp1_detail}\n\\footnotesize\n"
         "\\resizebox{\\textwidth}{!}{%\n"
         "\\begin{tabular}{llrrrrrrr}\n\\toprule\n"
-        "\\textbf{Scale} & \\textbf{System} & \\textbf{1T QPS} & \\textbf{Mean (ms)} & \\textbf{P50 (ms)} & "
-        "\\textbf{P99 (ms)} & \\textbf{Recall@10} & \\textbf{Graph \\%} & \\textbf{Build / Index Footprint} \\\\\n\\midrule\n"
+        "\\textbf{Scale} & \\textbf{System / Adaptation} & \\textbf{1T QPS} & \\textbf{Mean (ms)} & \\textbf{P50 (ms)} & "
+        "\\textbf{P99 (ms)} & \\textbf{Recall@10} & \\textbf{Graph \\%} & \\textbf{Build / Footprint} \\\\\n\\midrule\n"
         + "\n".join(t1_rows)
-        + "\n\\bottomrule\n\\end{tabular}}}\n\\end{table*}}\n\n"
+        + "\n\\bottomrule\n\\end{tabular}}\n\\end{table*}}\n\n"
         "\\newcommand{\\TableExpFour}{%\n"
         "\\begin{table}[t]\n\\centering\n"
-        "\\caption{Exp 4: Look-Ahead Contamination Rate (LCR), Stale Taint, Grounded Audit F1, and Simulated Backtest Sharpe (Proto A: post-2025 SEC; Proto B: counterfactual covenants).}\n"
-        "\\label{tab:exp4}\n\\small\n{\\renewcommand{\\arraystretch}{0.88}\n"
+        "\\caption{Exp 4: Look-Ahead Contamination Rate (LCR), Post-Restatement Stale Taint, and Grounded Restatement Audit F1 across the first 120 cases per protocol (240 queries/protocol; surrogate memory policies evaluated with \\texttt{Qwen2.5-7B-Instruct}).}\n"
+        "\\label{tab:exp4}\n\\small\n"
         "\\resizebox{\\columnwidth}{!}{%\n"
         "\\begin{tabular}{llrrrr}\n\\toprule\n"
-        "\\textbf{Proto.} & \\textbf{Memory System} & \\textbf{LCR ($\\downarrow$)} & \\textbf{Stale ($\\downarrow$)} & "
-        "\\textbf{F1 ($\\uparrow$)} & \\textbf{Sharpe ($\\Delta$)} \\\\\n\\midrule\n"
+        "\\textbf{Proto.} & \\textbf{Memory Policy} & \\textbf{Cases} & \\textbf{LCR ($\\downarrow$)} & \\textbf{Stale ($\\downarrow$)} & "
+        "\\textbf{Audit F1 ($\\uparrow$)} \\\\\n\\midrule\n"
         + "\n".join(t4_rows)
-        + "\n\\bottomrule\n\\end{tabular}}}\n\\end{table}}\n\n"
+        + "\n\\bottomrule\n\\end{tabular}}\n\\end{table}}\n\n"
         "\\newcommand{\\TableExpFive}{%\n"
         "\\begin{table}[t]\n\\centering\n"
-        "\\caption{Exp 5: Compaction footprint, hybrid Point-in-Time anchor-join query latency ($\\mu$s; \\texttt{---} denotes lossy text/centroid baselines without typed-anchor joins), and covenant/XBRL accuracy ($\\beta = 25\\%$) across Protocol B and post-2025 SEC EDGAR XBRL restatements.}\n"
-        "\\label{tab:exp5}\n\\small\n{\\renewcommand{\\arraystretch}{0.90}\n"
+        "\\caption{Exp 5: Compaction footprint ($\\beta = 25\\%$), query latency ($\\mu$s; \\texttt{---} marks lossy text/centroid baselines), and entity-scoped template slot-preservation check across 200 generated Protocol B covenants (with known actual values supplied) and XBRL-derived templated disclosures (evaluated within display-rounding tolerance). Note differing execution paths: resident C++ SQ8 (\\texttt{RAP-Compact}) vs.\\ in-memory FP32 (\\texttt{SQLite-BTree}) vs.\\ per-request file reopen FP32 (\\texttt{Parquet-Zstd}).}\n"
+        "\\label{tab:exp5}\n\\small\n"
         "\\resizebox{\\columnwidth}{!}{%\n"
         "\\begin{tabular}{lrrrrr}\n\\toprule\n"
-        "\\textbf{Compaction Method} & \\textbf{Bytes (Ratio)} & \\textbf{Lat ($\\mu$s)} & \\textbf{Num.\\ Exact} & \\textbf{Clause Pol.} & \\textbf{Exact QA} \\\\\n\\midrule\n"
+        "\\textbf{Compaction Method} & \\textbf{Bytes (Ratio)} & \\textbf{Lat ($\\mu$s)} & \\textbf{Slot Exact} & \\textbf{Clause Pol.} & \\textbf{Templ.\\ Chk.} \\\\\n\\midrule\n"
         + "\n".join(t5_rows)
-        + "\n\\bottomrule\n\\end{tabular}}}\n\\end{table}}\n\n"
+        + "\n\\bottomrule\n\\end{tabular}}\n\\end{table}}\n\n"
         + t6_block
         + t6_sys_block
     )

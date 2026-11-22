@@ -427,23 +427,36 @@ public:
             cands.push_back(CandEntry{d, static_cast<uint16_t>(c), first_vis_mi});
         }
 
-        std::size_t keep = std::min<std::size_t>(top_k, cands.size());
-        if (keep > 0) {
-            std::partial_sort(cands.begin(), cands.begin() + static_cast<std::ptrdiff_t>(keep), cands.end());
+        std::size_t keep_clusters = std::min<std::size_t>(top_k, cands.size());
+        if (keep_clusters > 0) {
+            std::partial_sort(cands.begin(), cands.begin() + static_cast<std::ptrdiff_t>(keep_clusters), cands.end());
         }
 
         std::unordered_set<uint16_t> top_cset;
-        for (std::size_t i = 0; i < keep; ++i) {
+        std::unordered_set<uint64_t> selected_mems;
+        for (std::size_t i = 0; i < keep_clusters; ++i) {
             uint16_t cid = cands[i].cid;
-            uint32_t mi = cands[i].vis_member_idx;
-            out.cluster_ids.push_back(cid);
-            out.member_ids.push_back(member_spans_[mi].source_mem_id);
-            out.cluster_distances.push_back(cands[i].dist);
-            out.cluster_summaries.push_back(member_snippets_[mi]);
             top_cset.insert(cid);
+            if (cid < cluster_members_.size()) {
+                for (uint32_t mi : cluster_members_[cid]) {
+                    if (out.member_ids.size() >= top_k) break;
+                    const auto& ms = member_spans_[mi];
+                    uint32_t eff_tke = ms.tk_e;
+                    if (retracted_tk != nullptr) {
+                        auto rit = retracted_tk->find(ms.source_mem_id);
+                        if (rit != retracted_tk->end() && rit->second < eff_tke) eff_tke = rit->second;
+                    }
+                    if (!bitemp_visible(ms.tv_s, ms.tv_e, ms.tk_s, eff_tke, tv_q, tk_q)) continue;
+                    if (!selected_mems.insert(ms.source_mem_id).second) continue;
+                    out.cluster_ids.push_back(cid);
+                    out.member_ids.push_back(ms.source_mem_id);
+                    out.cluster_distances.push_back(cands[i].dist);
+                    out.cluster_summaries.push_back(member_snippets_[mi]);
+                }
+            }
         }
 
-        // Join bi-temporally visible lossless anchors (respecting post-compaction retractions)
+        // Join bi-temporally visible lossless anchors (strictly bound to selected members when entity_filter is empty)
         if (!entity_filter.empty()) {
             out.matched_anchors = query_anchors_pit(entity_filter, tv_q, tk_q, retracted_tk);
         } else {
@@ -453,7 +466,7 @@ public:
                     auto rit = retracted_tk->find(pt.source_mem_id);
                     if (rit != retracted_tk->end() && rit->second < eff_tke) eff_tke = rit->second;
                 }
-                if (top_cset.count(pt.cluster_id) && bitemp_visible(pt.tv_s, pt.tv_e, pt.tk_s, eff_tke, tv_q, tk_q)) {
+                if (selected_mems.count(pt.source_mem_id) && bitemp_visible(pt.tv_s, pt.tv_e, pt.tk_s, eff_tke, tv_q, tk_q)) {
                     out.matched_anchors.push_back(unpack_anchor(pt));
                 }
             }

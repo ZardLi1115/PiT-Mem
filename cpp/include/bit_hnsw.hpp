@@ -665,7 +665,9 @@ public:
         // Global candidate handle: (seg_id, local_id) packed into uint64_t
         // Full-scan path needs only max(6k, 64) SQ8 finalists (matching Grid-SQ8-Scan), whereas multi-segment graph uses min(3*ef, 1536)!
         using GlobalCand = std::pair<float, uint64_t>;
-        const uint32_t scan_rerank_cap = std::max<uint32_t>(k * 6, 64u);
+        const uint32_t scan_rerank_cap = (force_mode == 1)
+            ? std::max<uint32_t>(k, ef_search)
+            : std::max<uint32_t>(k * 6, 64u);
         const uint32_t rerank_cap = std::max<uint32_t>(k * 8, std::min<uint32_t>(ef_search * 3, 1536u));
 
         if (use_scan) {
@@ -1028,7 +1030,7 @@ public:
     std::size_t size() const noexcept { return total_nodes_; }
     std::size_t num_segments() const noexcept { return segments_.size(); }
 
-    // Resident heap RAM footprint (excludes NVMe-mmap cold FP32 vectors once offloaded -> 1,033 B/rec!)
+    // Counted core index array bytes (excludes global_dir_ hash map & NVMe-mmap cold FP32 vectors once offloaded)
     std::size_t memory_bytes() const noexcept {
         std::size_t bytes = 0;
         for (const auto& sp : segments_) {
@@ -1054,6 +1056,67 @@ public:
             }
         }
         return bytes;
+    }
+
+    // Complete logical heap footprint including ext_to_loc_ unordered_map buckets/nodes, std::vector headers, and locks
+    std::size_t total_ram_bytes() const noexcept {
+        std::size_t bytes = memory_bytes();
+        // std::unordered_map<uint64_t, uint64_t> bucket array + libstdc++ _Hash_node<pair<const uint64_t, uint64_t>, false> (24B + 16B malloc header)
+        bytes += ext_to_loc_.bucket_count() * sizeof(void*)
+               + ext_to_loc_.size() * (sizeof(void*) + 2 * sizeof(uint64_t) + 16u);
+        bytes += causal_lag_reservoir_.capacity() * sizeof(uint32_t);
+        for (const auto& sp : segments_) {
+            const MacroSegment& seg = *sp;
+            bytes += sizeof(MacroSegment)
+                   + seg.adj_pre.capacity() * sizeof(std::vector<uint32_t>)
+                   + seg.adj_fwd.capacity() * sizeof(std::vector<uint32_t>)
+                   + seg.adj_upper.capacity() * sizeof(std::vector<std::vector<uint32_t>>)
+                   + seg.node_locks.size() * sizeof(SpinLock)
+                   + seg.upper_hubs.capacity() * sizeof(uint32_t)
+                   + seg.cells.capacity() * sizeof(decltype(seg.cells)::value_type);
+        }
+        return bytes;
+    }
+
+    // Exact logical RAM footprint excluding HNSW graph adjacency lists & hubs (for controlled BiT-ScanOnly ablation)
+    std::size_t non_graph_ram_bytes() const noexcept {
+        std::size_t tot = total_ram_bytes();
+        std::size_t g_bytes = 0;
+        for (const auto& sp : segments_) {
+            const MacroSegment& seg = *sp;
+            g_bytes += seg.adj_pre.capacity() * sizeof(std::vector<uint32_t>)
+                     + seg.adj_fwd.capacity() * sizeof(std::vector<uint32_t>)
+                     + seg.adj_upper.capacity() * sizeof(std::vector<std::vector<uint32_t>>)
+                     + seg.upper_hubs.capacity() * sizeof(uint32_t);
+            for (const auto& v : seg.adj_pre) g_bytes += v.capacity() * sizeof(uint32_t);
+            for (const auto& v : seg.adj_fwd) g_bytes += v.capacity() * sizeof(uint32_t);
+            for (const auto& lv : seg.adj_upper) {
+                g_bytes += lv.capacity() * sizeof(std::vector<uint32_t>);
+                for (const auto& v : lv) g_bytes += v.capacity() * sizeof(uint32_t);
+            }
+        }
+        return (tot > g_bytes) ? (tot - g_bytes) : tot;
+    }
+
+    bool verify_identical_state(const BiTHNSWIndex& other) const noexcept {
+        if (total_nodes_ != other.total_nodes_ || segments_.size() != other.segments_.size()) return false;
+        if (ext_to_loc_.size() != other.ext_to_loc_.size()) return false;
+        for (std::size_t s = 0; s < segments_.size(); ++s) {
+            const MacroSegment& a = *segments_[s];
+            const MacroSegment& b = *other.segments_[s];
+            if (a.num_nodes != b.num_nodes) return false;
+            for (std::size_t i = 0; i < a.num_nodes; ++i) {
+                if (a.ext_ids[i] != b.ext_ids[i] ||
+                    a.g_tv_s[i] != b.g_tv_s[i] || a.g_tv_e[i] != b.g_tv_e[i] ||
+                    a.g_tk_s[i] != b.g_tk_s[i] || a.g_tk_e[i] != b.g_tk_e[i]) {
+                    return false;
+                }
+                const float* va = a.fp32_ptr(i, cfg_.dim);
+                const float* vb = b.fp32_ptr(i, cfg_.dim);
+                if (std::memcmp(va, vb, cfg_.dim * sizeof(float)) != 0) return false;
+            }
+        }
+        return true;
     }
 
     std::size_t mmap_bytes() const noexcept {
@@ -1137,19 +1200,28 @@ public:
         return st;
     }
 
-    void drop_fp32_mmap_page_cache() const noexcept {
+    void drop_fp32_mmap_page_cache() noexcept {
         #if defined(__unix__) || defined(__APPLE__)
-        for (const auto& sp : segments_) {
-            const MacroSegment& seg = *sp;
-            if (seg.fp32_mmap_ptr != nullptr && seg.fp32_mmap_bytes > 0) {
+        for (auto& sp : segments_) {
+            MacroSegment& seg = *sp;
+            if (seg.fp32_mmap_ptr != nullptr && seg.fp32_mmap_bytes > 0 && seg.fp32_mmap_fd >= 0) {
+                // Unmap BEFORE posix_fadvise(DONTNEED) so Linux unconditionally evicts clean file-backed pages,
+                // then re-establish the read-only MADV_RANDOM mapping!
+                ::munmap(seg.fp32_mmap_ptr, seg.fp32_mmap_bytes);
+                seg.fp32_mmap_ptr = nullptr;
                 #ifdef POSIX_FADV_DONTNEED
-                if (seg.fp32_mmap_fd >= 0) {
-                    ::posix_fadvise(seg.fp32_mmap_fd, 0, static_cast<off_t>(seg.fp32_mmap_bytes), POSIX_FADV_DONTNEED);
+                ::posix_fadvise(seg.fp32_mmap_fd, 0, static_cast<off_t>(seg.fp32_mmap_bytes), POSIX_FADV_DONTNEED);
+                #endif
+                void* mapped = ::mmap(nullptr, seg.fp32_mmap_bytes, PROT_READ, MAP_SHARED, seg.fp32_mmap_fd, 0);
+                if (mapped != MAP_FAILED) {
+                    #ifdef MADV_RANDOM
+                    ::madvise(mapped, seg.fp32_mmap_bytes, MADV_RANDOM);
+                    #endif
+                    #ifdef MADV_DONTNEED
+                    ::madvise(mapped, seg.fp32_mmap_bytes, MADV_DONTNEED);
+                    #endif
+                    seg.fp32_mmap_ptr = static_cast<float*>(mapped);
                 }
-                #endif
-                #ifdef MADV_DONTNEED
-                ::madvise(seg.fp32_mmap_ptr, seg.fp32_mmap_bytes, MADV_DONTNEED);
-                #endif
             }
         }
         #endif

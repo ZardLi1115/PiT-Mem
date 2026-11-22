@@ -2,6 +2,7 @@
 
 #include "pit_types.hpp"
 #include "simd_kernels.hpp"
+#include "hnswlib/hnswlib.h"
 
 #include <vector>
 #include <queue>
@@ -9,12 +10,309 @@
 #include <algorithm>
 #include <chrono>
 #include <numeric>
+#include <memory>
 
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 
 namespace pitmem {
+
+// Official Upstream Open-Source Library Baseline: nmslib/hnswlib v0.8.0 (Malkov & Yashunin)
+// Multi-layer HierarchicalNSW<float> + AVX2 L2Space + native C++ BaseFilterFunctor for 4-sided Bi-Temporal Filtering!
+class OfficialHNSWLibIndex {
+public:
+    OfficialHNSWLibIndex(std::size_t dim, uint32_t m = 16, uint32_t ef_construction = 96)
+        : dim_(dim), m_(m), ef_c_(ef_construction), space_(dim) {}
+
+    void build_batch(
+        const uint64_t* ext_ids,
+        const float* vectors,
+        const uint32_t* tv_s,
+        const uint32_t* tv_e,
+        const uint32_t* tk_s,
+        const uint32_t* tk_e,
+        std::size_t n,
+        int num_threads = 0) {
+        if (n == 0) return;
+        std::size_t base = n_;
+        n_ += n;
+        if (!hnsw_) {
+            hnsw_ = std::make_unique<hnswlib::HierarchicalNSW<float>>(&space_, std::max<std::size_t>(n_ + 1024, 2048), m_, ef_c_);
+        } else if (n_ > hnsw_->max_elements_) {
+            hnsw_->resizeIndex(std::max<std::size_t>(n_ + 1024, hnsw_->max_elements_ * 2));
+        }
+
+        ext_ids_.resize(n_);
+        tv_s_.resize(n_);
+        tv_e_.resize(n_);
+        tk_s_.resize(n_);
+        tk_e_.resize(n_);
+        ext_to_int_.reserve(n_);
+
+        for (std::size_t i = 0; i < n; ++i) {
+            std::size_t id = base + i;
+            ext_ids_[id] = ext_ids[i];
+            ext_to_int_[ext_ids[i]] = static_cast<uint32_t>(id);
+            tv_s_[id] = tv_s[i];
+            tv_e_[id] = tv_e[i];
+            tk_s_[id] = tk_s[i];
+            tk_e_[id] = tk_e[i];
+        }
+
+        if (base == 0) {
+            hnsw_->addPoint(vectors, static_cast<hnswlib::labeltype>(0));
+        }
+        std::size_t start_i = (base == 0) ? 1 : 0;
+
+        #ifdef _OPENMP
+        int prev_t = omp_get_max_threads();
+        if (num_threads > 0) omp_set_num_threads(num_threads);
+        #pragma omp parallel for schedule(dynamic, 32) if(n > 64)
+        #endif
+        for (std::size_t i = start_i; i < n; ++i) {
+            std::size_t id = base + i;
+            hnsw_->addPoint(vectors + i * dim_, static_cast<hnswlib::labeltype>(id));
+        }
+        #ifdef _OPENMP
+        if (num_threads > 0) omp_set_num_threads(prev_t);
+        #endif
+    }
+
+    void update_tx_end(uint64_t ext_id, uint32_t new_tk_e) {
+        auto it = ext_to_int_.find(ext_id);
+        if (it != ext_to_int_.end()) tk_e_[it->second] = new_tk_e;
+    }
+
+    QueryResult search(
+        const float* q_vec,
+        uint32_t tv_q,
+        uint32_t tk_q,
+        uint32_t k,
+        uint32_t ef_search = 64) const {
+        auto t0 = std::chrono::steady_clock::now();
+        QueryResult out;
+        if (!hnsw_ || n_ == 0 || k == 0) return out;
+
+        struct BiTempFunctor final : public hnswlib::BaseFilterFunctor {
+            const uint32_t* tv_s;
+            const uint32_t* tv_e;
+            const uint32_t* tk_s;
+            const uint32_t* tk_e;
+            uint32_t tv_q;
+            uint32_t tk_q;
+            uint64_t* checks;
+            bool operator()(hnswlib::labeltype id) override {
+                (*checks)++;
+                return bitemp_visible(tv_s[id], tv_e[id], tk_s[id], tk_e[id], tv_q, tk_q);
+            }
+        };
+
+        hnsw_->setEf(std::max<std::size_t>(k, ef_search));
+        uint64_t pred_cnt = 0;
+        BiTempFunctor filt;
+        filt.tv_s = tv_s_.data;
+        filt.tv_e = tv_e_.data;
+        filt.tk_s = tk_s_.data;
+        filt.tk_e = tk_e_.data;
+        filt.tv_q = tv_q;
+        filt.tk_q = tk_q;
+        filt.checks = &pred_cnt;
+
+        auto res = hnsw_->searchKnnCloserFirst(q_vec, k, &filt);
+        out.stats.predicate_checks = pred_cnt;
+        out.ids.resize(res.size());
+        out.distances.resize(res.size());
+        for (std::size_t i = 0; i < res.size(); ++i) {
+            out.distances[i] = res[i].first;
+            out.ids[i] = ext_ids_[res[i].second];
+        }
+        auto t1 = std::chrono::steady_clock::now();
+        out.stats.latency_us = std::chrono::duration<double, std::micro>(t1 - t0).count();
+        return out;
+    }
+
+    // Exact multi-layer ACORN-1 arbitrary-predicate 2-hop search (Patel et al., SIGMOD 2024)
+    // executed directly over the genuine upstream hnswlib::HierarchicalNSW<float> multi-layer hierarchy!
+    QueryResult search_acorn1(
+        const float* q_vec,
+        uint32_t tv_q,
+        uint32_t tk_q,
+        uint32_t k,
+        uint32_t ef_search = 64) const {
+        auto t0 = std::chrono::steady_clock::now();
+        QueryResult out;
+        if (!hnsw_ || n_ == 0 || k == 0 || hnsw_->cur_element_count == 0) return out;
+
+        const std::size_t cur_cnt = hnsw_->cur_element_count;
+        auto passes = [&](hnswlib::tableint iid) -> bool {
+            out.stats.predicate_checks++;
+            std::size_t lbl = static_cast<std::size_t>(hnsw_->getExternalLabel(iid));
+            return bitemp_visible(tv_s_[lbl], tv_e_[lbl], tk_s_[lbl], tk_e_[lbl], tv_q, tk_q);
+        };
+        auto dist_to_q = [&](hnswlib::tableint iid) -> float {
+            out.stats.distance_computations++;
+            return hnsw_->fstdistfunc_(q_vec, hnsw_->getDataByInternalId(iid), hnsw_->dist_func_param_);
+        };
+
+        // Stage 1: Multi-layer greedy 2-hop predicate-aware zoom-in (matching ACORN.cpp greedy_update_nearest)
+        hnswlib::tableint currObj = hnsw_->enterpoint_node_;
+        bool curr_pass = passes(currObj);
+        float curdist = dist_to_q(currObj);
+
+        for (int level = hnsw_->maxlevel_; level > 0; --level) {
+            while (true) {
+                hnswlib::tableint prev_nearest = currObj;
+                hnswlib::linklistsizeint* ll_cur = hnsw_->get_linklist(currObj, level);
+                unsigned short sz = hnsw_->getListCount(ll_cur);
+                auto* data = reinterpret_cast<hnswlib::tableint*>(ll_cur + 1);
+                uint32_t num_found = 0;
+                for (unsigned short i = 0; i < sz; ++i) {
+                    hnswlib::tableint v = data[i];
+                    if (v >= cur_cnt) continue;
+                    if (passes(v)) {
+                        num_found++;
+                        float d = dist_to_q(v);
+                        if (d < curdist || !curr_pass) {
+                            currObj = v;
+                            curdist = d;
+                            curr_pass = true;
+                        }
+                        if (num_found >= m_) break;
+                    } else {
+                        hnswlib::linklistsizeint* ll2 = hnsw_->get_linklist(v, level);
+                        unsigned short sz2 = hnsw_->getListCount(ll2);
+                        auto* data2 = reinterpret_cast<hnswlib::tableint*>(ll2 + 1);
+                        for (unsigned short j = 0; j < sz2; ++j) {
+                            hnswlib::tableint v2 = data2[j];
+                            if (v2 >= cur_cnt) continue;
+                            if (passes(v2)) {
+                                num_found++;
+                                float d2 = dist_to_q(v2);
+                                if (d2 < curdist || !curr_pass) {
+                                    currObj = v2;
+                                    curdist = d2;
+                                    curr_pass = true;
+                                }
+                                if (num_found >= m_) break;
+                            }
+                        }
+                        if (num_found >= m_) break;
+                    }
+                }
+                if (currObj == prev_nearest) break;
+            }
+        }
+
+        // Stage 2: Base-layer (level 0) 2-hop predicate-subgraph beam search (matching ACORN.cpp search_from_candidates_2, gamma=1)
+        thread_local std::vector<uint32_t> vis_dist;
+        thread_local std::vector<uint32_t> vis_hop1;
+        thread_local uint32_t tok = 1;
+        if (vis_dist.size() < cur_cnt) {
+            vis_dist.assign(cur_cnt, 0);
+            vis_hop1.assign(cur_cnt, 0);
+        }
+        if (++tok == 0) {
+            std::fill(vis_dist.begin(), vis_dist.end(), 0);
+            std::fill(vis_hop1.begin(), vis_hop1.end(), 0);
+            tok = 1;
+        }
+
+        const std::size_t ef = std::max<std::size_t>(k, ef_search);
+        using Pair = std::pair<float, hnswlib::tableint>;
+        std::priority_queue<Pair, std::vector<Pair>, std::greater<Pair>> cand_min;
+        std::priority_queue<Pair> top_valid;
+
+        vis_dist[currObj] = tok;
+        cand_min.emplace(curdist, currObj);
+        if (curr_pass) {
+            top_valid.emplace(curdist, currObj);
+        }
+
+        const uint32_t m0_cap = m_ * 2;
+        while (!cand_min.empty()) {
+            auto [cd, cid] = cand_min.top();
+            cand_min.pop();
+            if (top_valid.size() >= ef && cd > top_valid.top().first) break;
+
+            hnswlib::linklistsizeint* ll0 = hnsw_->get_linklist0(cid);
+            unsigned short sz = hnsw_->getListCount(ll0);
+            auto* data = reinterpret_cast<hnswlib::tableint*>(ll0 + 1);
+            uint32_t found_here = 0;
+
+            for (unsigned short i = 0; i < sz; ++i) {
+                hnswlib::tableint v = data[i];
+                if (v >= cur_cnt) continue;
+                if (vis_dist[v] == tok) continue;
+
+                if (passes(v)) {
+                    vis_dist[v] = tok;
+                    found_here++;
+                    float d = dist_to_q(v);
+                    if (top_valid.size() < ef || d < top_valid.top().first) {
+                        cand_min.emplace(d, v);
+                        top_valid.emplace(d, v);
+                        if (top_valid.size() > ef) top_valid.pop();
+                    }
+                } else if (vis_hop1[v] != tok) {
+                    vis_hop1[v] = tok;
+                    hnswlib::linklistsizeint* ll2 = hnsw_->get_linklist0(v);
+                    unsigned short sz2 = hnsw_->getListCount(ll2);
+                    auto* data2 = reinterpret_cast<hnswlib::tableint*>(ll2 + 1);
+                    for (unsigned short j = 0; j < sz2; ++j) {
+                        hnswlib::tableint v2 = data2[j];
+                        if (v2 >= cur_cnt || vis_dist[v2] == tok) continue;
+                        if (passes(v2)) {
+                            vis_dist[v2] = tok;
+                            found_here++;
+                            float d2 = dist_to_q(v2);
+                            if (top_valid.size() < ef || d2 < top_valid.top().first) {
+                                cand_min.emplace(d2, v2);
+                                top_valid.emplace(d2, v2);
+                                if (top_valid.size() > ef) top_valid.pop();
+                            }
+                            if (found_here >= m0_cap) break;
+                        }
+                    }
+                }
+                if (found_here >= m0_cap) break;
+            }
+        }
+
+        while (top_valid.size() > k) top_valid.pop();
+        out.ids.resize(top_valid.size());
+        out.distances.resize(top_valid.size());
+        for (std::size_t idx = top_valid.size(); idx > 0; --idx) {
+            auto [d, iid] = top_valid.top();
+            top_valid.pop();
+            std::size_t lbl = static_cast<std::size_t>(hnsw_->getExternalLabel(iid));
+            out.distances[idx - 1] = d;
+            out.ids[idx - 1] = ext_ids_[lbl];
+        }
+        auto t1 = std::chrono::steady_clock::now();
+        out.stats.latency_us = std::chrono::duration<double, std::micro>(t1 - t0).count();
+        return out;
+    }
+
+    std::size_t memory_bytes() const noexcept {
+        std::size_t b = ext_ids_.capacity() * sizeof(uint64_t)
+                      + (tv_s_.size + tv_e_.size + tk_s_.size + tk_e_.size) * sizeof(uint32_t)
+                      + ext_to_int_.bucket_count() * sizeof(void*)
+                      + ext_to_int_.size() * (sizeof(void*) + sizeof(uint64_t) + sizeof(uint32_t) + 16u);
+        if (hnsw_) b += hnsw_->indexFileSize();
+        return b;
+    }
+
+private:
+    std::size_t dim_;
+    uint32_t m_, ef_c_;
+    std::size_t n_ = 0;
+    mutable hnswlib::L2Space space_;
+    mutable std::unique_ptr<hnswlib::HierarchicalNSW<float>> hnsw_;
+    std::vector<uint64_t> ext_ids_;
+    std::unordered_map<uint64_t, uint32_t> ext_to_int_;
+    AlignedBuffer<uint32_t, 64> tv_s_, tv_e_, tk_s_, tk_e_;
+};
 
 // Baseline 1: Standard Global HNSW with Predicate / Bitmap Filtering (Industrial Vector DB Baseline)
 class HNSWPostIndex {
@@ -161,9 +459,15 @@ public:
         return out;
     }
 
+
     std::size_t memory_bytes() const noexcept {
-        std::size_t b = ext_ids_.size() * 8 + n_ * 16 + vecs_.size * 4;
-        for (const auto& a : adj_) b += a.capacity() * 4;
+        std::size_t b = ext_ids_.capacity() * sizeof(uint64_t)
+                      + (tv_s_.size + tv_e_.size + tk_s_.size + tk_e_.size) * sizeof(uint32_t)
+                      + vecs_.size * sizeof(float)
+                      + ext_to_int_.bucket_count() * sizeof(void*)
+                      + ext_to_int_.size() * (sizeof(void*) + sizeof(uint64_t) + sizeof(uint32_t) + 16u)
+                      + adj_.capacity() * sizeof(std::vector<uint32_t>);
+        for (const auto& a : adj_) b += a.capacity() * sizeof(uint32_t);
         return b;
     }
 
@@ -477,6 +781,7 @@ public:
         return out;
     }
 
+
 private:
     std::size_t dim_;
     int axis_mode_;
@@ -556,7 +861,10 @@ public:
         std::size_t b = ext_ids_.capacity() * sizeof(uint64_t)
             + key_sorted_.capacity() * sizeof(uint32_t)
             + (tv_s_.size + tv_e_.size + tk_s_.size + tk_e_.size) * sizeof(uint32_t)
-            + vecs_.size * sizeof(float);
+            + vecs_.size * sizeof(float)
+            + ext_to_int_.bucket_count() * sizeof(void*)
+            + ext_to_int_.size() * (sizeof(void*) + sizeof(uint64_t) + sizeof(uint32_t) + 16u)
+            + (adj_left_.capacity() + adj_right_.capacity()) * sizeof(std::vector<uint32_t>);
         for (const auto& a : adj_left_) b += a.capacity() * sizeof(uint32_t);
         for (const auto& a : adj_right_) b += a.capacity() * sizeof(uint32_t);
         return b;
@@ -787,9 +1095,15 @@ public:
         return out;
     }
 
+
     std::size_t memory_bytes() const noexcept {
-        std::size_t b = ext_ids_.size() * 8 + n_ * 16 + vecs_.size * 4;
-        for (const auto& a : adj_) b += a.capacity() * 4;
+        std::size_t b = ext_ids_.capacity() * sizeof(uint64_t)
+                      + (tv_s_.size + tv_e_.size + tk_s_.size + tk_e_.size) * sizeof(uint32_t)
+                      + vecs_.size * sizeof(float)
+                      + ext_to_int_.bucket_count() * sizeof(void*)
+                      + ext_to_int_.size() * (sizeof(void*) + sizeof(uint64_t) + sizeof(uint32_t) + 16u)
+                      + adj_.capacity() * sizeof(std::vector<uint32_t>);
+        for (const auto& a : adj_) b += a.capacity() * sizeof(uint32_t);
         return b;
     }
 
@@ -1020,6 +1334,7 @@ public:
         out.stats.latency_us = std::chrono::duration<double, std::micro>(t1 - t0).count();
         return out;
     }
+
 
     std::size_t memory_bytes() const noexcept {
         std::size_t b = 0;

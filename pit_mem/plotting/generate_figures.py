@@ -225,14 +225,22 @@ def plot_fig1_motivation(results_dir: str, fig_dir: str, preview_dir: str | None
             if s == "PG-BiTemp":
                 pg_pt = (rx, py)
 
+    disp_m1 = {
+        "PG-BiTemp": "PG-BiTemp",
+        "ACORN-BiTemp": "ACORN-Style (C++)",
+        "SeRF-Adapt": "SeRF-Style 1D",
+        "DSG-1D": "DSG-Style 1D",
+        "HNSW-Post": "HNSW-Flat (C++)",
+        "Zep/Graphiti": "Graphiti-Style",
+    }
     # Sort baseline points by log-y so staggered left-side callouts never overlap
     other_pts.sort(key=lambda t: t[0], reverse=True)
     y_slots = np.geomspace(max_p99 * 0.62, max(4.5, max_p99 * 0.045), max(1, len(other_pts)))
     for (py, rx, s), y_lbl in zip(other_pts, y_slots):
-        x_lbl = max(14.0, min(50.0, rx - 42.0))
+        x_lbl = max(14.0, min(48.0, rx - 44.0))
         ax1.annotate(
-            s, xy=(rx, py), xytext=(x_lbl, y_lbl),
-            fontsize=6.1, color="#222222", ha="left", va="center",
+            disp_m1.get(s, s), xy=(rx, py), xytext=(x_lbl, y_lbl),
+            fontsize=5.9, color="#222222", ha="left", va="center",
             arrowprops=dict(arrowstyle="-", color="#7F8C8D", lw=0.55, shrinkA=1.5, shrinkB=2.5),
             zorder=8,
         )
@@ -290,11 +298,11 @@ def plot_fig1_motivation(results_dir: str, fig_dir: str, preview_dir: str | None
             )
 
     ax2.set_xticks(x2)
-    ax2.set_xticklabels(["PiT-Mem\n(Ours)", "Zep/\nGraphiti", "Mem0", "Naive\nGraphRAG"], fontsize=7.4)
+    ax2.set_xticklabels(["PiT-Mem\n(Ours)", "Latest-Sum.\n(Graphiti-st.)", "Overwrite\n(Mem0-st.)", "Append-Only\n(GraphRAG)"], fontsize=6.7)
     ax2.set_ylabel("Contamination Rate (%)")
     ax2.set_ylim(0, 142)
     ax2.set_yticks([0, 25, 50, 75, 100])
-    ax2.set_title("(b) Dual-Axis Leakage (2025–26 SEC)")
+    ax2.set_title("(b) Dual-Axis Policy Leakage (SEC)")
     ax2.legend(loc="upper left", frameon=True, facecolor="white", edgecolor="#CCCCCC", fontsize=6.7, handlelength=1.35)
     _add_better_badge(ax2, "Better ↓", "upper right")
 
@@ -487,7 +495,7 @@ def _build_fig2_tikz_source(tok_save_avg: float, max_comp: float) -> str:
 \node[font=\fontsize{{5.15}}{{6.1}}\selectfont, text=SlateDark, align=center] at (91.9, 33.55) {{$\mathcal{{N}}_{{\mathrm{{fwd}}}}$ ($M_{{\mathrm{{fwd}}}}{{=}}12$)\\Tag Bridge}};
 \node[font=\fontsize{{5.05}}{{6.0}}\selectfont, text=SlateMid] at (84.4, 27.55) {{Bounded 416K cap $\cdot$ Vitter lag reservoir}};
 
-\drawsubcard{{44.2}}{{1.5}}{{55.8}}{{22.3}}{{64B-Aligned Cell-Local SQ8 + SoA Death Table (1,032 B/rec RAM)}}
+\drawsubcard{{44.2}}{{1.5}}{{55.8}}{{22.3}}{{64B-Aligned Cell-Local SQ8 + SoA Death Table (1,032 B/rec Core Arrays)}}
 {lanes_tex}
 \draw[flow] (78.68, 13.50) -- (83.60, 13.50);
 \filldraw[fill=BgNeutral, draw=SlateDark, line width=0.65pt, rounded corners=0.85mm] (83.60, 9.40) rectangle (98.60, 17.60);
@@ -531,7 +539,7 @@ def _build_fig2_tikz_source(tok_save_avg: float, max_comp: float) -> str:
 \filldraw[fill=BlueFill, draw=BlueStroke, line width=0.60pt, rounded corners=0.75mm] (170.5, 33.6) rectangle (179.5, 41.8);
 \node[font=\fontsize{{4.9}}{{5.9}}\selectfont\bfseries, text=BlueText, align=center] at (175.0, 37.7) {{Atomic CAS\\Hot ($\ge 3$) $r'$}};
 
-\node[font=\fontsize{{5.1}}{{6.15}}\selectfont, text=SlateDark, align=center] at (162.7, 28.9) {{Frontier-clean $|O|\le k$ $\cdot$ {tok_save_avg:.1f}\% token savings\\0.00\% LCR \& 0.0\% Stale Taint}};
+\node[font=\fontsize{{5.1}}{{6.15}}\selectfont, text=SlateDark, align=center] at (162.7, 28.9) {{Frontier-clean $|O|\le k$ $\cdot$ {tok_save_avg:.1f}\% est.\ token savings\\0.00\% LCR \& 0.0\% Stale Taint}};
 
 \drawsubcard{{144.8}}{{1.5}}{{35.8}}{{22.3}}{{Unified Tiered RAP-Compact}}
 \filldraw[fill=FutureFill, draw=SlateDark, line width=0.58pt] (145.9, 9.8) rectangle (151.1, 18.0);
@@ -543,7 +551,7 @@ def _build_fig2_tikz_source(tok_save_avg: float, max_comp: float) -> str:
 \filldraw[fill=BlueFill, draw=BlueStroke, line width=0.58pt] (168.3, 9.8) rectangle (179.5, 18.0);
 \node[font=\fontsize{{4.95}}{{5.95}}\selectfont\bfseries, text=BlueText, align=center] at (173.9, 13.9) {{Unit SQ8\\+ Entity Idx}};
 
-\node[font=\fontsize{{5.1}}{{6.15}}\selectfont, text=SlateDark, align=center] at (162.7, 5.25) {{Unified Hot+Cold $[0,4]$ join ($<25\,\mu$s)\\Up to {max_comp:.1f}$\times$ compression @ 100.0\% QA}};
+\node[font=\fontsize{{5.1}}{{6.15}}\selectfont, text=SlateDark, align=center] at (162.7, 5.25) {{Unified Hot+Cold $[0,4]$ range merge ($<25\,\mu$s)\\Up to {max_comp:.1f}$\times$ compression (lossless slots)}};
 
 \foreach \xa/\xb in {{38.6/42.8, 101.4/105.6, 139.2/143.4}} {{
   \draw[stageflow] (\xa, 36.35) -- (\xb, 36.35);
@@ -617,6 +625,16 @@ def plot_fig3_exp1_scalability(results_dir: str, fig_dir: str, preview_dir: str 
         "PiT-Mem", "Grid-SQ8-Scan", "ACORN-BiTemp", "PG-BiTemp",
         "SeRF-Adapt", "DSG-1D", "Zep/Graphiti", "HNSW-Post",
     ]
+    disp_e1 = {
+        "PiT-Mem": "PiT-Mem",
+        "Grid-SQ8-Scan": "Grid-SQ8-Scan",
+        "ACORN-BiTemp": "ACORN-Style (C++)",
+        "PG-BiTemp": "PG-BiTemp",
+        "SeRF-Adapt": "SeRF-Style 1D",
+        "DSG-1D": "DSG-Style 1D",
+        "Zep/Graphiti": "Graphiti-Style",
+        "HNSW-Post": "HNSW-Flat (C++)",
+    }
     legend_handles = {}
 
     panel_idx = 0
@@ -638,6 +656,7 @@ def plot_fig3_exp1_scalability(results_dir: str, fig_dir: str, preview_dir: str 
                     continue
                 grp_s = grp.sort_values(["recall_at_10", "qps"])
                 is_ours = (sys_name == "PiT-Mem")
+                lbl_s = disp_e1.get(sys_name, sys_name)
                 (ln,) = ax.plot(
                     grp_s["recall_at_10"],
                     grp_s["qps"],
@@ -648,22 +667,20 @@ def plot_fig3_exp1_scalability(results_dir: str, fig_dir: str, preview_dir: str 
                     markersize=5.2 if is_ours else 4.2,
                     markeredgecolor="white",
                     markeredgewidth=0.6,
-                    label=sys_name,
+                    label=lbl_s,
                     zorder=6 if is_ours else 4,
                 )
-                if sys_name not in legend_handles:
-                    legend_handles[sys_name] = ln
+                if lbl_s not in legend_handles:
+                    legend_handles[lbl_s] = ln
 
             pit_sub = sub[sub["system"] == "PiT-Mem"]
             if reg == "moderate_12pct":
                 cmp_sub = sub[sub["system"] == "Grid-SQ8-Scan"]
                 cmp_lbl = "vs. Scan"
             else:
-                cmp_sub = sub[sub["system"] == "PG-BiTemp"]
+                # Only annotate PG-BiTemp speedup at N >= 500K (avoid magnifying small-scale 100K client/server ratios)
+                cmp_sub = sub[sub["system"] == "PG-BiTemp"] if sc >= 500_000 else pd.DataFrame()
                 cmp_lbl = "vs. PG"
-                if len(cmp_sub) == 0:
-                    cmp_sub = sub[sub["system"] == "ACORN-BiTemp"]
-                    cmp_lbl = "vs. ACORN"
 
             if len(cmp_sub) > 0 and len(pit_sub) > 0:
                 if reg == "moderate_12pct" and len(cmp_sub[cmp_sub["param_ef"] == 64]) > 0:
@@ -727,11 +744,11 @@ def plot_fig4_exp2_selectivity(results_dir: str, fig_dir: str, preview_dir: str 
         "PiT-Mem": "PiT-Mem (Hybrid)",
         scan_key: "Grid-SQ8-Scan",
         "PiT-Mem-GraphOnly": "PiT-Mem (GraphOnly)",
-        "ACORN-BiTemp": "ACORN-BiTemp",
+        "ACORN-BiTemp": "ACORN-Style (C++)",
         "PG-BiTemp": "PG-BiTemp",
-        "HNSW-Post (ef=1024)": "HNSW-Post",
-        "SeRF-Adapt": "SeRF-Adapt",
-        "DSG-1D": "DSG-1D",
+        "HNSW-Post (ef=1024)": "HNSW-Flat (C++)",
+        "SeRF-Adapt": "SeRF-Style 1D",
+        "DSG-1D": "DSG-Style 1D",
     }
 
     pit_df_e2 = df[df["system"] == "PiT-Mem"].sort_values("actual_sigma", ascending=False)
@@ -800,7 +817,7 @@ def plot_fig4_exp2_selectivity(results_dir: str, fig_dir: str, preview_dir: str 
         hp_narrow_rec = float(hp_grp["recall_at_10"].iloc[-1]) * 100.0
         hp_narrow_sig = float(hp_grp["actual_sigma"].iloc[-1]) * 100.0
         ax2.annotate(
-            f"HNSW Collapse\n({hp_broad_rec:.0f}%→{hp_narrow_rec:.0f}%)",
+            f"HNSW-Flat Collapse\n({hp_broad_rec:.0f}%→{hp_narrow_rec:.0f}%)",
             xy=(hp_narrow_sig, hp_narrow_rec), xytext=(0.75, 14.0),
             fontsize=6.3, fontweight="bold", color="#3B3B3B",
             bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="#666", lw=0.55),
@@ -834,11 +851,11 @@ def plot_fig5_exp3_restate(results_dir: str, fig_dir: str, preview_dir: str | No
         fig.subplots_adjust(wspace=0.31)
         ax3 = None
 
-    # Panel (a): Write Throughput
+    # Panel (a): Write Throughput (Measured C++ Attempts vs. Calibrated Rebuild / Eager Models)
     sys_map = [
-        ("PiT-Mem (Lazy-Branch MVCC)", "PiT-Mem (Lazy-Branch)", "o", "-"),
-        ("SeRF-Static-Rebuild", "SeRF-Static-Rebuild", "v", "--"),
-        ("Eager-LLM-Consolidate", "Eager-LLM-Reflect", "s", ":"),
+        ("PiT-Mem (Lazy-Branch MVCC)", "PiT-Mem (Measured C++)", "o", "-"),
+        ("SeRF-Static-Rebuild", "Static Rebuild (Est.)", "v", "--"),
+        ("Eager-LLM-Consolidate", "Eager-LLM (Modeled)", "s", ":"),
     ]
     for raw_s, disp_s, mk, ls in sys_map:
         g = df[df["system"] == raw_s].sort_values("restate_ratio")
@@ -852,23 +869,15 @@ def plot_fig5_exp3_restate(results_dir: str, fig_dir: str, preview_dir: str | No
             color=PALETTE.get(raw_s, "#333"), label=disp_s, zorder=6 if is_ours else 4,
         )
 
-    p20 = float(df[(df["system"] == "PiT-Mem (Lazy-Branch MVCC)") & (df["restate_ratio"] == 0.20)]["ops_per_sec"].iloc[0])
-    e20 = float(df[(df["system"] == "Eager-LLM-Consolidate") & (df["restate_ratio"] == 0.20)]["ops_per_sec"].iloc[0])
-    ax1.text(
-        0.96, 0.42, f"{p20 / max(1e-3, e20):.0f}× Faster vs.\nEager LLM",
-        transform=ax1.transAxes, ha="right", va="center",
-        fontsize=6.5, fontweight="bold", color="#C0392B",
-        bbox=dict(boxstyle="round,pad=0.18", fc="white", ec="#C0392B", lw=0.6), zorder=7,
-    )
     ax1.set_yscale("log")
     ax1.set_ylim(max(0.2, float(df["ops_per_sec"].min()) * 0.45), float(df["ops_per_sec"].max()) * 14.0)
     ax1.set_xlabel("RESTATE Intensity (% of Writes)")
-    ax1.set_ylabel("Write Throughput (Ops/s, log)")
-    ax1.set_title("(a) Restatement Write Speed")
-    ax1.legend(loc="upper right", frameon=True, facecolor="white", edgecolor="#CCC", fontsize=6.2)
+    ax1.set_ylabel("Write Rate (Ops/s, log)")
+    ax1.set_title("(a) Write Rate (C++ vs. Est.)")
+    ax1.legend(loc="upper right", frameon=True, facecolor="white", edgecolor="#CCC", fontsize=5.8)
     _add_better_badge(ax1, "Better ↑", "upper left")
 
-    # Panel (b): Total Write + Read Token Cost across Restatement Ratios
+    # Panel (b): Calibrated Accounting Model Token Cost across Restatement Ratios
     ratios = sorted(df["restate_ratio"].unique())
     x = np.arange(len(ratios))
     w = 0.26
@@ -878,9 +887,9 @@ def plot_fig5_exp3_restate(results_dir: str, fig_dir: str, preview_dir: str | No
     l_toks = [float(df[(df["restate_ratio"] == r) & (df["system"] == "PiT-Mem (Lazy-Branch MVCC)")]["llm_tokens_used"].iloc[0]) / 1e3 for r in ratios]
     savs = [float(df[(df["restate_ratio"] == r) & (df["system"] == "PiT-Mem (Lazy-Branch MVCC)")]["token_savings_pct"].iloc[0]) for r in ratios]
 
-    ax2.bar(x - w, e_toks, width=w, color="#1F4E79", edgecolor="#1A1A1A", lw=0.65, hatch="///", label="Eager Reflect", zorder=4)
+    ax2.bar(x - w, e_toks, width=w, color="#1F4E79", edgecolor="#1A1A1A", lw=0.65, hatch="///", label="Eager (Model)", zorder=4)
     ax2.bar(x, u_toks, width=w, color="#D95F02", edgecolor="#1A1A1A", lw=0.65, hatch="...", label="Unpack-Only", zorder=4)
-    b_l = ax2.bar(x + w, l_toks, width=w, color="#C0392B", edgecolor="#1A1A1A", lw=0.65, label="PiT-Mem (Write+Read)", zorder=5)
+    b_l = ax2.bar(x + w, l_toks, width=w, color="#C0392B", edgecolor="#1A1A1A", lw=0.65, label="PiT-Mem (W+R)", zorder=5)
 
     for bar, sv in zip(b_l, savs):
         ax2.text(
@@ -892,12 +901,12 @@ def plot_fig5_exp3_restate(results_dir: str, fig_dir: str, preview_dir: str | No
     ax2.set_xticklabels([f"{int(r * 100)}%" for r in ratios])
     ax2.set_ylim(0, max(max(e_toks), max(u_toks)) * 1.28)
     ax2.set_xlabel("RESTATE Intensity (% of Writes)")
-    ax2.set_ylabel("Total Write+Read Tokens ($\\times 10^3$)")
-    ax2.set_title("(b) End-to-End Token Cost")
-    ax2.legend(loc="upper left", frameon=True, facecolor="white", edgecolor="#CCC", fontsize=6.3)
+    ax2.set_ylabel("Modeled Tokens ($\\times 10^3$)")
+    ax2.set_title("(b) Modeled Write+Read Tokens")
+    ax2.legend(loc="upper left", frameon=True, facecolor="white", edgecolor="#CCC", fontsize=6.0)
     _add_better_badge(ax2, "Better ↓", "upper right")
 
-    # Panel (c): Hotness Threshold U-Curve Decomposition (Write + Extra Read Prompt Tokens)
+    # Panel (c): Hotness Threshold U-Curve Decomposition (Calibrated Token Accounting Model)
     if ax3 is not None:
         tx = np.arange(len(df_th))
         w_tok = df_th["write_consolidation_tokens"].to_numpy(dtype=float) / 1e3
@@ -909,7 +918,7 @@ def plot_fig5_exp3_restate(results_dir: str, fig_dir: str, preview_dir: str | No
 
         best_i = int(np.argmin(tot_tok))
         ax3.annotate(
-            f"Optimum\n(-{float(df_th['total_savings_pct'].iloc[best_i]):.0f}%)",
+            f"Model Min\n(-{float(df_th['total_savings_pct'].iloc[best_i]):.0f}%)",
             xy=(best_i, tot_tok[best_i]),
             xytext=(max(0.6, best_i - 0.6), max(tot_tok) * 0.68),
             fontsize=6.3, fontweight="bold", color="#C0392B",
@@ -922,8 +931,8 @@ def plot_fig5_exp3_restate(results_dir: str, fig_dir: str, preview_dir: str | No
         ax3.set_xticklabels(t_lbls[:len(tx)], fontsize=7.0)
         ax3.set_ylim(0, max(tot_tok) * 1.25)
         ax3.set_xlabel("Hotness Threshold $\\theta_{\\mathrm{hot}}$")
-        ax3.set_ylabel("Total LLM Tokens ($\\times 10^3$)")
-        ax3.set_title("(c) $\\theta_{\\mathrm{hot}}$ Trade-Off Curve (10%)")
+        ax3.set_ylabel("Modeled Tokens ($\\times 10^3$)")
+        ax3.set_title("(c) Modeled $\\theta_{\\mathrm{hot}}$ Curve (10%)")
         ax3.legend(loc="upper left", frameon=True, facecolor="white", edgecolor="#CCC", fontsize=6.2)
         _add_better_badge(ax3, "Better ↓", "upper right")
 
@@ -932,7 +941,7 @@ def plot_fig5_exp3_restate(results_dir: str, fig_dir: str, preview_dir: str | No
 
 
 # ==============================================================================
-# FIGURE 6: Exp 4 Dual-Protocol Audit F1 & Illusory Sharpe Inflation
+# FIGURE 6: Exp 4 Dual-Protocol Look-Ahead Contamination (LCR) & Grounded Audit F1
 # ==============================================================================
 def plot_fig6_exp4_leakage(results_dir: str, fig_dir: str, preview_dir: str | None = None) -> None:
     df = pd.read_csv(os.path.join(results_dir, "exp4_leakage_and_audit.csv"))
@@ -942,61 +951,50 @@ def plot_fig6_exp4_leakage(results_dir: str, fig_dir: str, preview_dir: str | No
     pa = df[df["protocol"] == "Protocol_A_Post2025"].reset_index(drop=True)
     pb = df[df["protocol"] == "Protocol_B_Counterfactual"].reset_index(drop=True)
     systems = list(pa["system"])
-    disp_names = ["PiT-Mem\n(Full)", "PiT-Mem\n(-NoLazy)", "Zep/\nGraphiti", "Mem0", "Naive\nGraphRAG"]
+    disp_names = ["PiT-Mem\n(Full)", "PiT-Mem\n(NoLazy)", "Latest-Sum.\n(Graphiti)", "Overwrite\n(Mem0)", "Append\n(GraphRAG)"]
     x = np.arange(len(systems))
     w = 0.36
 
-    b1 = ax1.bar(x - w / 2, pa["audit_f1_pct"], width=w, color="#C0392B", edgecolor="#1A1A1A", lw=0.7,
-                 label="Protocol A (2025–26 Post-Cutoff SEC)", zorder=4)
-    b2 = ax1.bar(x + w / 2, pb["audit_f1_pct"], width=w, color="#1F4E79", edgecolor="#1A1A1A", lw=0.7, hatch="///",
-                 label="Protocol B (Counterfactual Perturbation)", zorder=4)
+    b1 = ax1.bar(x - w / 2, pa["lcr_pct"], width=w, color="#C0392B", edgecolor="#1A1A1A", lw=0.7,
+                 label="Protocol A (120 Post-2025 SEC Cases)", zorder=4)
+    b2 = ax1.bar(x + w / 2, pb["lcr_pct"], width=w, color="#1F4E79", edgecolor="#1A1A1A", lw=0.7, hatch="///",
+                 label="Protocol B (120 Counterfactual Cases)", zorder=4)
 
     for bar in list(b1) + list(b2):
         h = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width() / 2, h + 1.5, f"{h:.0f}", ha="center", va="bottom", fontsize=6.1, color="#222")
+        txt = "0%" if h < 0.05 else f"{h:.0f}"
+        ax1.text(bar.get_x() + bar.get_width() / 2, h + 1.5, txt, ha="center", va="bottom",
+                 fontsize=6.0, fontweight="bold" if h < 0.05 else "normal",
+                 color="#C0392B" if h < 0.05 else "#222")
 
     ax1.set_xticks(x)
-    ax1.set_xticklabels(disp_names[:len(x)], fontsize=7.0)
-    ax1.set_ylabel("Post-Restatement Audit F1 (%)")
-    ax1.set_ylim(0, 116)
-    ax1.set_title("(a) Post-Restatement Audit F1")
-    _add_better_badge(ax1, "Better ↑", "upper right")
+    ax1.set_xticklabels(disp_names[:len(x)], fontsize=6.1)
+    ax1.set_ylabel("Look-Ahead Contamination (LCR, %)")
+    ax1.set_ylim(0, 122)
+    ax1.set_yticks([0, 25, 50, 75, 100])
+    ax1.set_title("(a) Pre-Restatement Look-Ahead (LCR)")
+    _add_better_badge(ax1, "Better ↓", "upper left")
 
-    true_sh = float(pa[pa["system"] == "PiT-Mem (Full)"]["backtest_sharpe"].iloc[0])
-    ax2.axhspan(true_sh, 6.4, color="#FADBD8", alpha=0.36, zorder=0)
-    ax2.axhline(true_sh, color="#196F3D", linestyle="--", linewidth=1.15, zorder=5)
-    ax2.text(
-        0.03, 0.24, f"Leak-Free Sharpe = {true_sh:.2f}",
-        transform=ax2.transAxes, fontsize=6.4, fontweight="bold", color="#196F3D",
-        bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="#196F3D", lw=0.55, alpha=0.93),
-        zorder=7,
-    )
+    f1 = ax2.bar(x - w / 2, pa["audit_f1_pct"], width=w, color="#C0392B", edgecolor="#1A1A1A", lw=0.7, zorder=4)
+    f2 = ax2.bar(x + w / 2, pb["audit_f1_pct"], width=w, color="#1F4E79", edgecolor="#1A1A1A", lw=0.7, hatch="///", zorder=4)
 
-    ax2.bar(x - w / 2, pa["backtest_sharpe"], width=w, color="#C0392B", edgecolor="#1A1A1A", lw=0.7, zorder=4)
-    ax2.bar(x + w / 2, pb["backtest_sharpe"], width=w, color="#1F4E79", edgecolor="#1A1A1A", lw=0.7, hatch="///", zorder=4)
-
-    mem_idx = systems.index("Mem0-Overwrite")
-    mem_sh = float(pa.loc[mem_idx, "backtest_sharpe"])
-    ax2.annotate(
-        f"+{mem_sh - true_sh:.2f} Illusory\nLook-Ahead Alpha",
-        xy=(mem_idx - w / 2, mem_sh), xytext=(0.05, 4.95),
-        fontsize=6.6, fontweight="bold", color="#922B21",
-        bbox=dict(boxstyle="round,pad=0.18", fc="white", ec="#C0392B", lw=0.65),
-        arrowprops=_callout_arrow("#C0392B", lw=0.95, rad=-0.08, shrinkA=0.0, shrinkB=2.4),
-        zorder=7,
-    )
+    for bar in list(f1) + list(f2):
+        h = bar.get_height()
+        ax2.text(bar.get_x() + bar.get_width() / 2, h + 1.5, f"{h:.0f}", ha="center", va="bottom", fontsize=6.0, color="#222")
 
     ax2.set_xticks(x)
-    ax2.set_xticklabels(disp_names[:len(x)], fontsize=7.0)
-    ax2.set_ylabel("Simulated Annualized Sharpe")
-    ax2.set_ylim(0, 6.25)
-    ax2.set_title("(b) Illusory Backtest Sharpe Inflation")
+    ax2.set_xticklabels(disp_names[:len(x)], fontsize=6.1)
+    ax2.set_ylabel("Grounded Restatement Audit F1 (%)")
+    ax2.set_ylim(0, 114)
+    ax2.set_yticks([0, 25, 50, 75, 100])
+    ax2.set_title("(b) Grounded Restatement Audit F1")
+    _add_better_badge(ax2, "Better ↑", "upper right")
 
     fig.legend(
         [b1, b2],
-        ["Protocol A (2025–26 Post-Cutoff SEC XBRL)", "Protocol B (Entity-Anonymized Counterfactual)"],
+        ["Protocol A (120 Post-2025 SEC XBRL Cases)", "Protocol B (120 Entity-Anonymized Cases)"],
         loc="upper center", bbox_to_anchor=(0.5, 0.99),
-        ncol=2, frameon=True, facecolor="white", edgecolor="#CCCCCC", fontsize=7.4,
+        ncol=2, frameon=True, facecolor="white", edgecolor="#CCCCCC", fontsize=7.2,
     )
     _save_both(fig, fig_dir, "fig6_exp4_leakage", preview_dir)
     plt.close(fig)
@@ -1011,13 +1009,13 @@ def plot_fig7_exp5_compact(results_dir: str, fig_dir: str, preview_dir: str | No
     sec_df = df[df["dataset"] == "Wild_SEC_EDGAR_Filings"] if "dataset" in df.columns else pd.DataFrame()
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.25, 2.95))
-    fig.subplots_adjust(wspace=0.31, top=0.75)
+    fig.subplots_adjust(wspace=0.31, top=0.74)
 
     methods_order = [
-        ("RAP-Compact (Ours)", "RAP-Compact (Ours)", "-"),
-        ("Parquet-Zstd + Medoid", "Parquet-Zstd + Medoid", "--"),
-        ("SQLite-BTree + Medoid", "SQLite-BTree + Medoid", "-."),
-        ("LLM-Abstractive-Summary", "LLM-Abstractive-Summary", "--"),
+        ("RAP-Compact (Ours)", "RAP-Compact (Res. C++, SQ8)", "-"),
+        ("Parquet-Zstd + Medoid", "Parquet-Zstd (File Read, FP32)", "--"),
+        ("SQLite-BTree + Medoid", "SQLite-BTree (In-Mem, FP32)", "-."),
+        ("LLM-Abstractive-Summary", "LLM-Summary (Trunc. Prompt)", "--"),
         ("Centroid-MeanPool", "Centroid-MeanPool", "-."),
         ("Narrative-Truncation", "Narrative-Truncation", ":"),
     ]
@@ -1054,14 +1052,14 @@ def plot_fig7_exp5_compact(results_dir: str, fig_dir: str, preview_dir: str | No
 
     ax1.axhspan(94.0, 106.0, color="#D5F5E3", alpha=0.40, zorder=0)
     ax1.set_xlabel("Target Compaction Budget $\\beta$ (%)")
-    ax1.set_ylabel("Covenant Breach QA Acc. (%)")
+    ax1.set_ylabel("Template Anchor Check (%)")
     ax1.set_xlim(12.5, 52.5)
     ax1.set_ylim(-4, 107)
     ax1.set_xticks([15, 25, 35, 50])
-    ax1.set_title("(a) Exact Covenant QA Fidelity")
+    ax1.set_title("(a) Template Slot Preservation")
     _add_better_badge(ax1, "Better ↖", "lower right")
 
-    # Panel (b): Compression Ratio vs. Hybrid Point-in-Time Query Latency (us, log) for 100%-Accurate Stores
+    # Panel (b): Compression Ratio vs. Hybrid Point-in-Time Query Latency (us, log)
     lossless_methods = ["RAP-Compact (Ours)", "SQLite-BTree + Medoid", "Parquet-Zstd + Medoid"]
     for m_name in lossless_methods:
         g = cov_df[cov_df["method"] == m_name].sort_values("compression_ratio")
@@ -1083,36 +1081,36 @@ def plot_fig7_exp5_compact(results_dir: str, fig_dir: str, preview_dir: str | No
             sy = float(sr["query_lat_us"].iloc[0])
             ax2.scatter([sx], [sy], s=95, marker="*", color="#C0392B", edgecolors="#1A1A1A", linewidths=0.7, zorder=8)
             ax2.annotate(
-                f"SEC EDGAR XBRL\n({sx:.1f}×, {sy:.1f}$\\mu$s, 100%)",
-                xy=(sx, sy), xytext=(max(4.0, sx * 0.35), sy * 5.5),
-                fontsize=6.3, fontweight="bold", color="#922B21",
+                f"XBRL Templated\n({sx:.1f}×, {sy:.1f}$\\mu$s)",
+                xy=(sx, sy), xytext=(max(4.0, sx * 0.35), sy * 6.5),
+                fontsize=6.2, fontweight="bold", color="#922B21",
                 bbox=dict(boxstyle="round,pad=0.16", fc="white", ec="#C0392B", lw=0.6),
                 arrowprops=_callout_arrow("#C0392B", lw=0.90, shrinkA=0.0, shrinkB=3.5),
                 zorder=8,
             )
 
     rap25 = cov_df[(cov_df["method"] == "RAP-Compact (Ours)") & (cov_df["target_budget"] == 0.25)]
-    pq25 = cov_df[(cov_df["method"] == "Parquet-Zstd + Medoid") & (cov_df["target_budget"] == 0.25)]
-    if len(rap25) > 0 and len(pq25) > 0:
-        sp_pq = float(pq25["query_lat_us"].iloc[0]) / max(1e-3, float(rap25["query_lat_us"].iloc[0]))
+    sql25 = cov_df[(cov_df["method"] == "SQLite-BTree + Medoid") & (cov_df["target_budget"] == 0.25)]
+    if len(rap25) > 0 and len(sql25) > 0:
+        sp_sql = float(sql25["query_lat_us"].iloc[0]) / max(1e-3, float(rap25["query_lat_us"].iloc[0]))
         ax2.text(
-            0.68, 0.56, f"{sp_pq:.0f}× Faster PiT\nJoin vs. Parquet",
-            transform=ax2.transAxes, ha="center", fontsize=6.4, fontweight="bold", color="#C0392B",
+            0.66, 0.56, f"{sp_sql:.1f}× vs. SQLite\n(In-Mem, $\\beta$=25%)",
+            transform=ax2.transAxes, ha="center", fontsize=6.2, fontweight="bold", color="#C0392B",
             bbox=dict(boxstyle="round,pad=0.16", fc="white", ec="#C0392B", lw=0.6, alpha=0.95),
             zorder=7,
         )
 
     ax2.set_yscale("log")
     ax2.set_xlabel("Compression Ratio ($\\times$ Raw Footprint)")
-    ax2.set_ylabel("Hybrid PiT Query Latency ($\\mu$s, log)")
+    ax2.set_ylabel("Query Latency ($\\mu$s, log)")
     ax2.set_ylim(3.0, max(20000.0, float(cov_df["query_lat_us"].max()) * 2.5))
-    ax2.set_title("(b) Lossless Storage Latency Trade-Off")
+    ax2.set_title("(b) Slot-Backed Store Latency")
     _add_better_badge(ax2, "Better ↘", "upper left")
 
     fig.legend(
         handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.99),
         ncol=3, frameon=True, facecolor="white", edgecolor="#CCCCCC",
-        fontsize=6.8, columnspacing=0.85, handletextpad=0.4,
+        fontsize=6.2, columnspacing=0.65, handletextpad=0.35,
     )
     _save_both(fig, fig_dir, "fig7_exp5_compact", preview_dir)
     plt.close(fig)

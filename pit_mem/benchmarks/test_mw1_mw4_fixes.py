@@ -493,6 +493,55 @@ def test_router_hardware_auto_calibration():
     )
 
 
+def test_official_upstream_baselines_and_bit_exact_state():
+    import tempfile
+    rng = np.random.default_rng(123)
+    n, d = 1500, 64
+    ids = np.arange(1, n + 1, dtype=np.uint64)
+    vecs = rng.standard_normal((n, d)).astype(np.float32)
+    vecs /= np.linalg.norm(vecs, axis=1, keepdims=True)
+    tvs = rng.integers(100, 1000, size=n, dtype=np.uint32)
+    tve = tvs + rng.integers(80, 900, size=n, dtype=np.uint32)
+    tks = rng.integers(100, 1000, size=n, dtype=np.uint32)
+    tke = np.full(n, int(pm.INF_TICK), dtype=np.uint32)
+
+    ho = pm.OfficialHNSWLibIndex(d, 16, 64)
+    ho.build_batch(ids, vecs, tvs, tve, tks, tke, 0)
+    qv = vecs[:8].copy()
+    tvq = np.full(8, 500, dtype=np.uint32)
+    tkq = np.full(8, 950, dtype=np.uint32)
+    r_h = ho.search_batch(qv, tvq, tkq, 10, 96)
+    r_a = ho.search_acorn1_batch(qv, tvq, tkq, 10, 96)
+    assert len(r_h) == 8 and len(r_a) == 8 and ho.memory_bytes() > n * d * 4
+
+    cfg = pm.BiTHNSWConfig()
+    cfg.dim = d
+    idx = pm.BiTHNSWIndex(cfg)
+    idx.build_batch(ids, vecs, tvs, tve, tks, tke, 0)
+    assert idx.total_ram_bytes() > idx.memory_bytes()
+    assert idx.non_graph_ram_bytes() < idx.total_ram_bytes()
+
+    with tempfile.TemporaryDirectory() as tmpd:
+        sf = f"{tmpd}/s.snap"
+        wf = f"{tmpd}/s.wal"
+        idx.save_snapshot(sf, True)
+        idx.open_wal(wf, False)
+        idx.begin_wal_tx()
+        idx.insert_single(999_001, vecs[0], 200, int(pm.INF_TICK), 1200, int(pm.INF_TICK))
+        idx.update_tx_end(1, 1250)
+        idx.commit_wal_tx()
+        idx.sync_wal()
+        idx.close_wal()
+        with open(wf, "ab") as fw:
+            fw.write(b"LAWP\x0a\x00\x00\x00" + b"\x55" * 17)
+
+        rec = pm.BiTHNSWIndex(cfg)
+        rec.load_snapshot(sf, True)
+        rec.replay_wal(wf)
+        assert rec.verify_identical_state(idx)
+    print("[Official hnswlib + ACORN-1 + Bit-Exact Torn-WAL State Verification] PASSED!")
+
+
 if __name__ == "__main__":
     test_mw1_analytical_router_and_multisegment_recall()
     test_mw2_nvme_mmap_offload_and_concurrent_stress()
@@ -500,4 +549,5 @@ if __name__ == "__main__":
     test_mw4_streaming_cell_skew_elimination()
     test_post_codex_engine_wal_cold_restate_and_preconditions()
     test_router_hardware_auto_calibration()
+    test_official_upstream_baselines_and_bit_exact_state()
     print("\nALL MW1--MW4 + POST-CODEX UNIT & CONCURRENCY STRESS TESTS PASSED 100%!")
